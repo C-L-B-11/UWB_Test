@@ -1,71 +1,189 @@
-package com.example.uwb_test;
+package com.example.uwb_test
 
-import android.os.Bundle;
 
-import com.google.android.material.snackbar.Snackbar;
+import android.view.View
+import android.widget.Button
+import android.widget.EditText
+import android.widget.Switch
+import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.uwb.RangingParameters
+import androidx.core.uwb.RangingResult
+import androidx.core.uwb.UwbClientSessionScope
+import androidx.core.uwb.UwbComplexChannel
+import androidx.core.uwb.UwbDevice
+import androidx.core.uwb.UwbManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
-import androidx.appcompat.app.AppCompatActivity;
+class MainActivity  : AppCompatActivity() {
+    private var exception: TextView? = null
+    private var etSessionId: EditText? = null
+    private var etSessionKeyInfo: EditText? = null
+    private var etSubSessionKeyInfo: EditText? = null
+    private var etPartnerAddress: EditText? = null
+    private var etRangeDisplay: EditText?=null
+    private var swIsController: Switch? = null
+    private var start: Button? = null
 
-import android.view.View;
+    //private var uwbMan: UwbManager? = null
 
-/*import androidx.navigation.NavController;
-import androidx.navigation.Navigation;
-import androidx.navigation.ui.AppBarConfiguration;
-import androidx.navigation.ui.NavigationUI;*/
+    private val scope = CoroutineScope(Dispatchers.IO)
 
-import com.example.uwb_test.databinding.ActivityMainBinding;
-
-import android.view.Menu;
-import android.view.MenuItem;
-
-public class MainActivity extends AppCompatActivity {
-
-    //private AppBarConfiguration appBarConfiguration;
-    private ActivityMainBinding binding;
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-
-        binding = ActivityMainBinding.inflate(getLayoutInflater());
-        setContentView(binding.getRoot());
-
-        setSupportActionBar(binding.toolbar);
-
-        /*NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment_content_main);
-        appBarConfiguration = new AppBarConfiguration.Builder(navController.getGraph()).build();
-        NavigationUI.setupActionBarWithNavController(this, navController, appBarConfiguration);*/
-
+    protected fun onCreate() {
+        InitUI()
+        //uwbMan = UwbManager.createInstance(baseContext)
 
     }
 
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.menu_main, menu);
-        return true;
+    private fun InitUI() {
+        etSessionId = findViewById<EditText>(R.id.etSessionId)
+        etSessionKeyInfo = findViewById<EditText>(R.id.etSessionKeyInfo)
+        etSubSessionKeyInfo = findViewById<EditText>(R.id.etSubSessionKeyInfo)
+        etPartnerAddress = findViewById<EditText>(R.id.etPartnerAddress)
+        etRangeDisplay = findViewById<EditText>(R.id.rangeDisplay)
+        swIsController = findViewById<Switch>(R.id.swIsController)
+        exception = findViewById<TextView>(R.id.exception)
+        start = findViewById<Button>(R.id.ConButton)
+        start!!.setOnClickListener { v: View? -> connect() }
+
     }
 
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
-
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            return true;
+    private fun connect() {
+        if (!getPackageManager().hasSystemFeature("android.hardware.uwb")) {
+            exception?.setText("Uwb feature not available")
+            return
         }
 
-        return super.onOptionsItemSelected(item);
+        val uwbManager = UwbManager.createInstance(baseContext)
+        scope.launch {
+            val sessionScope: UwbClientSessionScope = uwbManager.clientSessionScope()
+            val ucc: UwbComplexChannel = UwbComplexChannel(
+                channel = 1,
+                preambleIndex = 1
+            )
+            val parameters = RangingParameters(
+                uwbConfigType = RangingParameters.CONFIG_UNICAST_DS_TWR,
+                sessionId = ParseStringToInt(etSessionId?.text.toString()),
+                subSessionId = 0,
+                sessionKeyInfo = ParseStringToByteArry(etSessionKeyInfo?.text.toString()), // shared key
+                subSessionKeyInfo = ParseStringToByteArry(etSubSessionKeyInfo?.text.toString()), // shared key,
+                complexChannel = ucc,
+                peerDevices = listOf(
+                    UwbDevice.createForAddress(ParseStringToByteArry(etPartnerAddress?.text.toString()))
+                ),
+                updateRateType = RangingParameters.RANGING_UPDATE_RATE_FREQUENT
+            )
+
+            if(swIsController?.isChecked == true)
+            {
+                val clientSession = uwbManager.controleeSessionScope()
+                // Share the localAddress of the current session to the partner device.
+                //broadcastMyParameters(clientSession.localAddress)
+
+                val sessionFlow = clientSession.prepareSession(parameters)
+
+                // Start a coroutine scope that initiates ranging.
+                CoroutineScope(Dispatchers.Main.immediate).launch {
+                    sessionFlow.collect {
+                        when(it) {
+                            is RangingResult.RangingResultPosition -> etRangeDisplay?.setText(it.position.distance.toString())
+                            is RangingResult.RangingResultPeerDisconnected -> etRangeDisplay?.setText("Disconnected")
+                            else -> {}
+                        }
+                    }
+                }
+            }
+            else
+            {
+                val clientSession2 = uwbManager.controllerSessionScope()
+                // Share the localAddress of the current session to the partner device.
+                //broadcastMyParameters(clientSession.localAddress)
+
+                val sessionFlow = clientSession2.prepareSession(parameters)
+
+                // Start a coroutine scope that initiates ranging.
+                CoroutineScope(Dispatchers.Main.immediate).launch {
+                    sessionFlow.collect {
+                        when(it) {
+                            is RangingResult.RangingResultPosition -> etRangeDisplay?.setText(it.position.distance.toString())
+                            is RangingResult.RangingResultPeerDisconnected -> etRangeDisplay?.setText("Disconnected")
+                            else -> {}
+                        }
+                    }
+                }
+            }
+
+
+
+
+        }
+
+
     }
 
-    @Override
-    public boolean onSupportNavigateUp() {
-        /*NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment_content_main);
-        return NavigationUI.navigateUp(navController, appBarConfiguration)
-                || super.onSupportNavigateUp();*/
-        return false;
+    private fun ParseStringToInt(s: String):Int{
+        var x = 0
+        for(c in s.toCharArray())
+        {
+            if(!c.isDigit())
+                return 0
+            x*=10
+            x+= c.minus('0')
+        }
+        return x
+    }
+
+    private fun ParseStringToByteArry(s: String):ByteArray{
+        var x : ByteArray = ByteArray(8)
+
+        if(s.length!=16)
+            return x
+
+        x= ByteArray(s.length/2){0}
+
+        var i:Int=0
+        var byte: Byte = 0
+        while(i <s.length)
+        {
+
+            if(HexVal(s[i]) == (-1).toByte()||HexVal(s[i+1]) == (-1).toByte())
+                byte=0
+            else
+                byte = ((HexVal(s[i]).toInt().shl(4).toByte()) + HexVal(s[i+1])).toByte()
+            x[i]=byte
+            i+=2
+        }
+        return x
+    }
+    private fun HexVal(c:Char): Byte{
+        var x:Byte = 0
+        when(c){
+            '0' -> x=0
+            '1' -> x=1
+            '2' -> x=2
+            '3' -> x=3
+            '4' -> x=4
+            '5' -> x=5
+            '6' -> x=6
+            '7' -> x=7
+            '8' -> x=8
+            '9' -> x=9
+            'A' -> x=10
+            'B' -> x=11
+            'C' -> x=12
+            'D' -> x=13
+            'E' -> x=14
+            'F' -> x=15
+            'a' -> x=10
+            'b' -> x=11
+            'c' -> x=12
+            'd' -> x=13
+            'e' -> x=14
+            'f' -> x=15
+            else -> x=-1
+        }
+        return x
     }
 }

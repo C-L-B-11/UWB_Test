@@ -49,17 +49,17 @@
                 android:layout_height="match_parent">
 
                 <TextView
-                    android:id="@+id/textView1"
+                    android:id="@+id/tvSessionId"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="TextView"
+                    android:text="SessionId"
                     android:textSize="10pt" />
 
                 <EditText
-                    android:id="@+id/editText1"
+                    android:id="@+id/etSessionId"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="TextView"
+                    android:text=""
                     android:textSize="10pt" />
             </TableRow>
 
@@ -68,31 +68,80 @@
                 android:layout_height="match_parent">
 
                 <TextView
-                    android:id="@+id/textView2"
+                    android:id="@+id/tvSessionKeyInfo"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="TextViewysdfgy"
+                    android:text="SessionKeyInfo"
                     android:textSize="10pt" />
 
                 <EditText
-                    android:id="@+id/editText2"
+                    android:id="@+id/etSessionKeyInfo"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="TextView"
+                    android:text=""
                     android:textSize="10pt" />
             </TableRow>
 
             <TableRow
                 android:layout_width="match_parent"
-                android:layout_height="match_parent" />
+                android:layout_height="match_parent">
+
+                <TextView
+                    android:id="@+id/tvSubSessionKeyInfo"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="SessionKeyInfo"
+                    android:textSize="10pt" />
+
+                <EditText
+                    android:id="@+id/etSubSessionKeyInfo"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="10pt" />
+            </TableRow>
 
             <TableRow
                 android:layout_width="match_parent"
-                android:layout_height="match_parent" />
+                android:layout_height="match_parent">
+
+                <TextView
+                    android:id="@+id/tvPartnerAddress"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="PartnerAddress"
+                    android:textSize="10pt" />
+
+                <EditText
+                    android:id="@+id/etPartnerAddress"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="10pt" />
+            </TableRow>
+
+            <TableRow
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <TextView
+                    android:id="@+id/tvIsController"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="SessionKeyInfo"
+                    android:textSize="10pt" />
+
+                <Switch
+                    android:id="@+id/swIsController"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="" />
+
+            </TableRow>
         </TableLayout>
 
         <Button
-            android:id="@+id/button"
+            android:id="@+id/ConButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginStart="10dp"
@@ -105,16 +154,27 @@
 
 
         <TextView
-            android:id="@+id/textView4"
+            android:id="@+id/rangeDisplay"
             android:layout_width="wrap_content"
             android:layout_height="78dp"
-            android:layout_marginTop="50dp"
+            android:layout_marginTop="10dp"
             android:text="10cm"
             android:textSize="50sp"
             app:layout_anchorGravity="center"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/button" />
+            app:layout_constraintTop_toBottomOf="@+id/exception" />
+
+        <TextView
+            android:id="@+id/exception"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="TextView"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/ConButton" />
+
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
