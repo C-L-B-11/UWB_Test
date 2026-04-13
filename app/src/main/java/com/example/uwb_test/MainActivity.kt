@@ -1,7 +1,9 @@
 package com.example.uwb_test
 
 
+import android.os.Bundle
 import android.view.View
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Switch
@@ -23,7 +25,7 @@ class MainActivity  : AppCompatActivity() {
     private var etSessionKeyInfo: EditText? = null
     private var etSubSessionKeyInfo: EditText? = null
     private var etPartnerAddress: EditText? = null
-    private var etRangeDisplay: EditText?=null
+    private var tvRangeDisplay: TextView?=null
     private var swIsController: Switch? = null
     private var start: Button? = null
 
@@ -31,7 +33,10 @@ class MainActivity  : AppCompatActivity() {
 
     private val scope = CoroutineScope(Dispatchers.IO)
 
-    protected fun onCreate() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        setContentView(R.layout.activity_main);
         InitUI()
         //uwbMan = UwbManager.createInstance(baseContext)
 
@@ -42,7 +47,7 @@ class MainActivity  : AppCompatActivity() {
         etSessionKeyInfo = findViewById<EditText>(R.id.etSessionKeyInfo)
         etSubSessionKeyInfo = findViewById<EditText>(R.id.etSubSessionKeyInfo)
         etPartnerAddress = findViewById<EditText>(R.id.etPartnerAddress)
-        etRangeDisplay = findViewById<EditText>(R.id.rangeDisplay)
+        tvRangeDisplay = findViewById<TextView>(R.id.rangeDisplay)
         swIsController = findViewById<Switch>(R.id.swIsController)
         exception = findViewById<TextView>(R.id.exception)
         start = findViewById<Button>(R.id.ConButton)
@@ -88,8 +93,8 @@ class MainActivity  : AppCompatActivity() {
                 CoroutineScope(Dispatchers.Main.immediate).launch {
                     sessionFlow.collect {
                         when(it) {
-                            is RangingResult.RangingResultPosition -> etRangeDisplay?.setText(it.position.distance.toString())
-                            is RangingResult.RangingResultPeerDisconnected -> etRangeDisplay?.setText("Disconnected")
+                            is RangingResult.RangingResultPosition -> tvRangeDisplay?.setText(it.position.distance.toString())
+                            is RangingResult.RangingResultPeerDisconnected -> tvRangeDisplay?.setText("Disconnected")
                             else -> {}
                         }
                     }
@@ -107,8 +112,8 @@ class MainActivity  : AppCompatActivity() {
                 CoroutineScope(Dispatchers.Main.immediate).launch {
                     sessionFlow.collect {
                         when(it) {
-                            is RangingResult.RangingResultPosition -> etRangeDisplay?.setText(it.position.distance.toString())
-                            is RangingResult.RangingResultPeerDisconnected -> etRangeDisplay?.setText("Disconnected")
+                            is RangingResult.RangingResultPosition -> tvRangeDisplay?.text=it.position.distance.toString()
+                            is RangingResult.RangingResultPeerDisconnected -> tvRangeDisplay?.text="Disconnected"
                             else -> {}
                         }
                     }
