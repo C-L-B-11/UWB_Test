@@ -141,9 +141,9 @@ class MainActivity  : AppCompatActivity() {
     }
 
     private fun ParseStringToByteArry(s: String):ByteArray{
-        var x : ByteArray = ByteArray(8)
+        var x : ByteArray = ByteArray(16)
 
-        if(s.length!=16)
+        if(s.length!=32)
             return x
 
         x= ByteArray(s.length/2){0}

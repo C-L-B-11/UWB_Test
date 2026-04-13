@@ -90,12 +90,12 @@
                     android:id="@+id/tvSubSessionKeyInfo"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="SessionKeyInfo"
+                    android:text="SubSessionKeyInfo"
                     android:textSize="10pt" />
 
                 <EditText
                     android:id="@+id/etSubSessionKeyInfo"
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text=""
                     android:textSize="10pt" />
@@ -128,14 +128,16 @@
                     android:id="@+id/tvIsController"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="SessionKeyInfo"
+                    android:text="IsController"
                     android:textSize="10pt" />
 
                 <Switch
                     android:id="@+id/swIsController"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_gravity="left"
                     android:text="" />
+
 
             </TableRow>
         </TableLayout>
