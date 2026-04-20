@@ -3,9 +3,8 @@ package com.example.uwb_test
 
 import android.Manifest
 import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothGatt
-import android.bluetooth.BluetoothGattCharacteristic
-import android.content.Context
+import android.bluetooth.BluetoothManager
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.ranging.RangingConfig
 import android.ranging.RangingData
@@ -13,13 +12,10 @@ import android.ranging.RangingDevice
 import android.ranging.RangingManager
 import android.ranging.RangingPreference
 import android.ranging.RangingSession
-import android.ranging.ble.rssi.BleRssiRangingParams
 import android.ranging.oob.DeviceHandle
 import android.ranging.oob.OobInitiatorRangingConfig
 import android.ranging.oob.OobResponderRangingConfig
 import android.ranging.oob.TransportHandle
-import android.ranging.raw.RawRangingDevice
-import android.ranging.raw.RawResponderRangingConfig
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
@@ -28,11 +24,7 @@ import android.widget.Switch
 import android.widget.TextView
 import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AppCompatActivity
-
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import java.util.UUID
+import androidx.core.app.ActivityCompat
 import java.util.concurrent.Executor
 
 
@@ -44,20 +36,20 @@ class MainActivity  : AppCompatActivity() {
     private var etSessionKeyInfo: EditText? = null
     private var etSubSessionKeyInfo: EditText? = null
     private var etPartnerAddress: EditText? = null
-    private var tvRangeDisplay: TextView?=null
+    private var tvRangeDisplay: TextView? = null
     private var swIsController: Switch? = null
     private var start: Button? = null
 
     //private var uwbMan: UwbManager? = null
-    private var rangingManager : RangingManager? = null
+    private var rangingManager :RangingManager? = null
 
-    private val scope = CoroutineScope(Dispatchers.IO)
+    //private val scope = CoroutineScope(Dispatchers.IO)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_main);
-        rangingManager = baseContext.getSystemService("RangingManager") as RangingManager;
+        rangingManager = baseContext.getSystemService(RangingManager::class.java) as RangingManager
         InitUI()
         //uwbMan = UwbManager.createInstance(baseContext)
 
@@ -86,6 +78,30 @@ class MainActivity  : AppCompatActivity() {
         var mySession = rangingManager?.createRangingSession(myExecuter, myCallback)
         var role=0
         var config : RangingConfig
+
+
+        if (ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        var bMngr : BluetoothManager = (baseContext.getSystemService(BLUETOOTH_SERVICE) as BluetoothManager)
+        var list: List<BluetoothDevice> = bMngr.adapter.bondedDevices.toList()
+        var i =list.size
+        exception?.setText("found $i devices")
+
+        if(i==0)
+            return
+        var bDev = list[0]
+        val rangingDevice = RangingDevice.Builder().setUuid(bDev.uuids[0].uuid).build()
+        val transportHandle = myTransportHandle()
+        val deviceHandle: DeviceHandle = DeviceHandle.Builder(rangingDevice,transportHandle)
+            .build()
+
+
+
         if(swIsController?.isChecked == true) {
             role=RangingPreference.DEVICE_ROLE_INITIATOR
             config = OobInitiatorRangingConfig.Builder().build()
@@ -93,12 +109,7 @@ class MainActivity  : AppCompatActivity() {
         else
         {
             role = RangingPreference.DEVICE_ROLE_RESPONDER
-            config = OobResponderRangingConfig.Builder(
-                DeviceHandle.Builder(
-                    RangingDevice.Builder().build(),
-                TransportHandle.
-                ).build()
-            ).build()
+            config = (OobResponderRangingConfig.Builder( deviceHandle).build()) as RangingConfig;
         }
 
         var rangingPreference: RangingPreference.Builder =  RangingPreference.Builder(role, config)
@@ -107,76 +118,6 @@ class MainActivity  : AppCompatActivity() {
         mySession?.start(rangingPreference.build())
 
 
-
-        /*
-        if (!getPackageManager().hasSystemFeature("android.hardware.uwb")) {
-            exception?.setText("Uwb feature not available")
-            return
-        }*/
-        /*
-        val uwbManager = UwbManager.createInstance(baseContext)
-        scope.launch {
-            val sessionScope: UwbClientSessionScope = uwbManager.clientSessionScope()
-            val ucc: UwbComplexChannel = UwbComplexChannel(
-                channel = 1,
-                preambleIndex = 1
-            )
-            val parameters = RangingParameters(
-
-                sessionId = ParseStringToInt(etSessionId?.text.toString()),
-                subSessionId = 0,
-                sessionKeyInfo = ParseStringToByteArry(etSessionKeyInfo?.text.toString()), // shared key
-                subSessionKeyInfo = ParseStringToByteArry(etSubSessionKeyInfo?.text.toString()), // shared key,
-                complexChannel = ucc,
-                peerDevices = listOf(
-                    UwbDevice.createForAddress(ParseStringToByteArry(etPartnerAddress?.text.toString()))
-                ),
-                updateRateType = RangingParameters.RANGING_UPDATE_RATE_FREQUENT
-            )
-
-            if(swIsController?.isChecked == true)
-            {
-                val clientSession = uwbManager.controleeSessionScope()
-                // Share the localAddress of the current session to the partner device.
-                //broadcastMyParameters(clientSession.localAddress)
-
-                val sessionFlow = clientSession.prepareSession(parameters)
-
-                // Start a coroutine scope that initiates ranging.
-                CoroutineScope(Dispatchers.Main.immediate).launch {
-                    sessionFlow.collect {
-                        when(it) {
-                            is RangingResult.RangingResultPosition -> tvRangeDisplay?.setText(it.position.distance.toString())
-                            is RangingResult.RangingResultPeerDisconnected -> tvRangeDisplay?.setText("Disconnected")
-                            else -> {}
-                        }
-                    }
-                }
-            }
-            else
-            {
-                val clientSession2 = uwbManager.controllerSessionScope()
-                // Share the localAddress of the current session to the partner device.
-                //broadcastMyParameters(clientSession.localAddress)
-
-                val sessionFlow = clientSession2.prepareSession(parameters)
-
-                // Start a coroutine scope that initiates ranging.
-                CoroutineScope(Dispatchers.Main.immediate).launch {
-                    sessionFlow.collect {
-                        when(it) {
-                            is RangingResult.RangingResultPosition -> tvRangeDisplay?.text=it.position.distance.toString()
-                            is RangingResult.RangingResultPeerDisconnected -> tvRangeDisplay?.text="Disconnected"
-                            else -> {}
-                        }
-                    }
-                }
-            }
-
-
-
-
-        }*/
 
 
     }
@@ -233,153 +174,6 @@ class MainActivity  : AppCompatActivity() {
     }
 
 
-
-    class BLETransportHandle(
-        private val context: Context,
-        private val device: BluetoothDevice,
-        private val serviceUUID: UUID,
-        private val writeCharUUID: UUID,
-        private val notifyCharUUID: UUID
-    ) : TransportHandle {
-
-        private var gatt: BluetoothGatt? = null
-        private var writeChar: BluetoothGattCharacteristic? = null
-        private var notifyChar: BluetoothGattCharacteristic? = null
-
-        @Volatile
-        private var connected = false
-
-        private var receiveCallback: ((ByteArray) -> Unit)? = null
-
-        private var connectDeferred: CompletableDeferred<Unit>? = null
-        private var writeDeferred: CompletableDeferred<Unit>? = null
-
-        override suspend fun connect() = withContext(Dispatchers.IO) {
-            if (connected) return@withContext
-
-            connectDeferred = CompletableDeferred()
-
-            gatt = device.connectGatt(context, false, gattCallback)
-
-            connectDeferred?.await()
-        }
-
-        override suspend fun disconnect() = withContext(Dispatchers.IO) {
-            gatt?.disconnect()
-            gatt?.close()
-            gatt = null
-            connected = false
-        }
-
-        override suspend fun send(data: ByteArray) = withContext(Dispatchers.IO) {
-            if (!connected) error("Not connected")
-
-            val characteristic = writeChar ?: error("Write characteristic not found")
-
-            val chunks = chunkData(data)
-
-            for (chunk in chunks) {
-                writeDeferred = CompletableDeferred()
-
-                characteristic.value = chunk
-                val success = gatt?.writeCharacteristic(characteristic) ?: false
-
-                if (!success) {
-                    writeDeferred?.completeExceptionally(Exception("Write failed to start"))
-                }
-
-                writeDeferred?.await()
-            }
-        }
-
-        override fun setOnReceive(callback: (ByteArray) -> Unit) {
-            receiveCallback = callback
-        }
-
-        override fun isConnected(): Boolean = connected
-
-        // --- BLE Callback ---
-
-        private val gattCallback = object : BluetoothGattCallback() {
-
-            override fun onConnectionStateChange(
-                gatt: BluetoothGatt,
-                status: Int,
-                newState: Int
-            ) {
-                if (newState == BluetoothProfile.STATE_CONNECTED) {
-                    gatt.discoverServices()
-                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                    connected = false
-                }
-            }
-
-            override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-                val service = gatt.getService(serviceUUID)
-                    ?: return connectDeferred?.completeExceptionally(Exception("Service not found"))
-
-                writeChar = service.getCharacteristic(writeCharUUID)
-                notifyChar = service.getCharacteristic(notifyCharUUID)
-
-                if (writeChar == null || notifyChar == null) {
-                    connectDeferred?.completeExceptionally(Exception("Characteristics missing"))
-                    return
-                }
-
-                enableNotifications(gatt, notifyChar!!)
-                connected = true
-                connectDeferred?.complete(Unit)
-            }
-
-            override fun onCharacteristicChanged(
-                gatt: BluetoothGatt,
-                characteristic: BluetoothGattCharacteristic
-            ) {
-                if (characteristic.uuid == notifyCharUUID) {
-                    receiveCallback?.invoke(characteristic.value)
-                }
-            }
-
-            override fun onCharacteristicWrite(
-                gatt: BluetoothGatt,
-                characteristic: BluetoothGattCharacteristic,
-                status: Int
-            ) {
-                if (status == BluetoothGatt.GATT_SUCCESS) {
-                    writeDeferred?.complete(Unit)
-                } else {
-                    writeDeferred?.completeExceptionally(Exception("Write failed"))
-                }
-            }
-        }
-
-        // --- Helpers ---
-
-        private fun enableNotifications(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic
-        ) {
-            gatt.setCharacteristicNotification(characteristic, true)
-
-            val descriptor = characteristic.getDescriptor(
-                UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
-            )
-
-            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-            gatt.writeDescriptor(descriptor)
-        }
-
-        private fun chunkData(data: ByteArray, chunkSize: Int = 20): List<ByteArray> {
-            val chunks = mutableListOf<ByteArray>()
-            var i = 0
-            while (i < data.size) {
-                val end = (i + chunkSize).coerceAtMost(data.size)
-                chunks.add(data.copyOfRange(i, end))
-                i += chunkSize
-            }
-            return chunks
-        }
-    }
 
     private fun ParseStringToInt(s: String):Int{
         var x = 0
