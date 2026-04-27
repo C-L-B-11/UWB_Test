@@ -8,24 +8,23 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
+import android.bluetooth.BluetoothGattServerCallback
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
-import android.bluetooth.le.AdvertisingSetCallback
 import android.bluetooth.le.BluetoothLeAdvertiser
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanResult
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.ranging.RangingConfig
 import android.ranging.RangingData
 import android.ranging.RangingDevice
 import android.ranging.RangingManager
-import android.ranging.RangingPreference
 import android.ranging.RangingSession
-import android.ranging.oob.DeviceHandle
-import android.ranging.oob.OobInitiatorRangingConfig
-import android.ranging.oob.OobResponderRangingConfig
-import android.ranging.oob.TransportHandle
+import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
@@ -35,10 +34,11 @@ import android.widget.TextView
 import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-import com.google.firebase.crashlytics.buildtools.reloc.org.apache.commons.logging.Log
 import java.util.UUID
 import java.util.concurrent.Executor
 
+val SERVICE_UUID: UUID = UUID.fromString("0000180D-0000-1000-8000-00805f9b34fb")
+val CHAR_UUID: UUID = UUID.fromString("00002A37-0000-1000-8000-00805f9b34fb")
 
 class MainActivity  : AppCompatActivity() {
 
@@ -67,6 +67,16 @@ class MainActivity  : AppCompatActivity() {
 
     }
 
+
+    private val characteristic = BluetoothGattCharacteristic(
+        CHAR_UUID,
+        BluetoothGattCharacteristic.PROPERTY_WRITE or
+                BluetoothGattCharacteristic.PROPERTY_READ or
+                BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+        BluetoothGattCharacteristic.PERMISSION_WRITE or
+                BluetoothGattCharacteristic.PERMISSION_READ
+    )
+
     private fun InitUI() {
 
         etSessionId = findViewById<EditText>(R.id.etSessionId)
@@ -85,30 +95,43 @@ class MainActivity  : AppCompatActivity() {
 
     @RequiresPermission(Manifest.permission.RANGING)
     private fun connect() {
-        val myCallback = myCallback()
+        val myRangingSessionCallback = myRangingSessionCallback()
         val myExecuter = myExecutor()
         //var mySession = rangingManager?.createRangingSession(myExecuter, myCallback)
         var role=0
         var config : RangingConfig
 
 
-        if ((ActivityCompat.checkSelfPermission(
+        if (
+            (ActivityCompat.checkSelfPermission(
                 this,
                 Manifest.permission.BLUETOOTH_CONNECT
-            ) != PackageManager.PERMISSION_GRANTED)|| ActivityCompat.checkSelfPermission(
+            ) != PackageManager.PERMISSION_GRANTED)
+            || (ActivityCompat.checkSelfPermission(
                 this,
                 Manifest.permission.BLUETOOTH_ADVERTISE
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_ADVERTISE),1)
+            ) != PackageManager.PERMISSION_GRANTED)
+            || (ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.BLUETOOTH_SCAN
+            ) != PackageManager.PERMISSION_GRANTED)
+        )
+        {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_ADVERTISE,Manifest.permission.BLUETOOTH_SCAN),1)
             if ((ActivityCompat.checkSelfPermission(
                     this,
                     Manifest.permission.BLUETOOTH_CONNECT
-                ) != PackageManager.PERMISSION_GRANTED)|| ActivityCompat.checkSelfPermission(
+                ) != PackageManager.PERMISSION_GRANTED)
+                || (ActivityCompat.checkSelfPermission(
                     this,
                     Manifest.permission.BLUETOOTH_ADVERTISE
-                ) != PackageManager.PERMISSION_GRANTED
-            ){
+                ) != PackageManager.PERMISSION_GRANTED)
+                || (ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.BLUETOOTH_SCAN
+                ) != PackageManager.PERMISSION_GRANTED)
+            )
+            {
             exception?.setText("No Permission")
             return
             }
@@ -126,14 +149,13 @@ class MainActivity  : AppCompatActivity() {
             return
         var bDev = list[0]
         if(swIsController?.isChecked==false){
-            var AS: AdvertiseSettings = AdvertiseSettings.Builder().setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED).setConnectable(true).setDiscoverable(true).setTimeout(10000).build()
-            var AD: AdvertiseData = AdvertiseData.Builder().setIncludeDeviceName(true).setIncludeTxPowerLevel(true).build()
-            var ACB = myBluetoothAdvertiseCallback()
-            bMngr.adapter.bluetoothLeAdvertiser?.startAdvertising(AS,AD,ACB)
 
+            BLConnectionControlee_GattServer(bMngr)
         }
         else {
-            TestController(bDev)
+
+            BLConnectionControler_GattClient(bMngr)
+            BLConnectionControler_GattClient_GotScanResult(bDev)
         }
 
 
@@ -165,8 +187,18 @@ class MainActivity  : AppCompatActivity() {
 
     }
 
-    public fun TestController(blDevice: BluetoothDevice){
-        android.util.Log.d("TEST","Das ist ein Test Log")
+    @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
+    private fun BLConnectionControler_GattClient(bMngr: BluetoothManager){
+        var SC = bMngr.adapter.getBluetoothLeScanner()
+        if(SC==null)
+            return
+
+        var myScanCallback = myBluetoothScannerCallback()
+        SC.startScan(myScanCallback)
+
+    }
+    public fun BLConnectionControler_GattClient_GotScanResult(blDevice : BluetoothDevice){
+
         var myCallback = myBluetoothGattCallback()
 
         if (ActivityCompat.checkSelfPermission(
@@ -177,69 +209,98 @@ class MainActivity  : AppCompatActivity() {
             exception?.setText("no permission")
             return
         }
-        var gatt =  blDevice.connectGatt(baseContext,false,myCallback)
-        android.util.Log.d("TEST",gatt.device.toString())
-        if(swIsController?.isChecked == true){
-            android.util.Log.d("TEST","SendingTestData")
-            val byteArray = byteArrayOf(0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xA,0xB,0xC,0xD,0xE,0xF)
-            val characteristic: BluetoothGattCharacteristic = BluetoothGattCharacteristic(
-                UUID(1234,1234),
-                BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_WRITE,
-                BluetoothGattCharacteristic.PERMISSION_READ or BluetoothGattCharacteristic.PERMISSION_WRITE)
+        var gatt = blDevice.connectGatt(baseContext, false, myCallback)
+        android.util.Log.d("TEST", gatt.device.toString())
+    }
 
-            gatt.writeCharacteristic(characteristic,byteArray,BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
-        }
-
+    private fun BLConnectionControlee_GattServer(bMngr:BluetoothManager){
+        var AS: AdvertiseSettings = AdvertiseSettings.Builder().setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED).setConnectable(true).setDiscoverable(true).setTimeout(10000).build()
+        var AD: AdvertiseData = AdvertiseData.Builder().setIncludeDeviceName(true).setIncludeTxPowerLevel(true).build()
+        var ACB = myBluetoothAdvertiseCallback()
+        bMngr.adapter?.bluetoothLeAdvertiser?.startAdvertising(AS, AD, ACB)
 
 
     }
-    public class myBluetoothGattCallback: BluetoothGattCallback(){
+
+
+
+
+
+
+
+    public inner class myBluetoothScannerCallback: ScanCallback(){
+        override fun onBatchScanResults(results : List<ScanResult> )
+        {
+            var i = results.size
+            android.util.Log.d("ScanCallback","onBatchScanResults: $i devices")
+            BLConnectionControler_GattClient_GotScanResult(results[0].device)
+        }
+
+        override fun onScanFailed(errorCode : Int)
+        {
+            android.util.Log.d("ScanCallback","onScanFailed: $errorCode")
+        }
+
+        override fun onScanResult(callbackType : Int,result : ScanResult )
+        {
+            android.util.Log.d("ScanCallback","onScanResult: $callbackType")
+        }
+    }
+
+    public  inner class myBluetoothGattCallback : BluetoothGattCallback {
+        //val partnerUUID: UUID
+        public constructor() {
+
+        }
+
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic,value: ByteArray) {
             val s= characteristic.toString()
-            android.util.Log.d("test","onCharacteristicChanged: $s")
-
-
+            android.util.Log.d("BluetoothGattCallback","onCharacteristicChanged: $s")
 
         }
         override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic:BluetoothGattCharacteristic,value: ByteArray, status:Int) {
             val s= characteristic.toString()
-            android.util.Log.d("test","onCharacteristicRead: $s, status: $status")
+            android.util.Log.d("BluetoothGattCallback","onCharacteristicRead: $s, status: $status")
         }
         override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic:BluetoothGattCharacteristic, status:Int) {
             val s= characteristic.toString()
-            android.util.Log.d("test","onCharacteristicWrite: $s, status: $status")
+            android.util.Log.d("BluetoothGattCallback","onCharacteristicWrite: $s, status: $status")
         }
+
+        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         override fun onConnectionStateChange(gatt: BluetoothGatt, status:Int, newState:Int){
             val statusString = if(status==BluetoothGatt.GATT_SUCCESS) "success" else "failure"
             val stateString = if(newState==BluetoothProfile.STATE_DISCONNECTED) "disconnected" else "connected"
-            android.util.Log.d("test","onConnectionStateChanged: status:$statusString, newState:$stateString")
+            Log.d("BluetoothGattCallback","onConnectionStateChanged: status:$statusString, newState:$stateString")
+            //SendTestMessage(gatt = gatt)
+
         }
         override fun onDescriptorRead(gatt: BluetoothGatt,descriptor: BluetoothGattDescriptor,status: Int,value: ByteArray) {
-            android.util.Log.d("test","onDescriptorRead: status:$status")
+            android.util.Log.d("BluetoothGattCallback","onDescriptorRead: status:$status")
         }
         override fun onDescriptorWrite(gatt: BluetoothGatt?,descriptor: BluetoothGattDescriptor?,status: Int) {
-            android.util.Log.d("test","onDescriptorWrite: status:$status")
+            android.util.Log.d("BluetoothGattCallback","onDescriptorWrite: status:$status")
         }
         override fun onMtuChanged(gatt: BluetoothGatt?, mtu: Int, status: Int) {
-            android.util.Log.d("test","onMtuChanged: status:$status, mtu:$mtu")
+            android.util.Log.d("BluetoothGattCallback","onMtuChanged: status:$status, mtu:$mtu")
         }
         override fun onPhyRead(gatt: BluetoothGatt?, txPhy: Int, rxPhy: Int, status: Int) {
-            android.util.Log.d("test","onPhyRead: txPhy: $txPhy, rxPhy: $rxPhy, status: $status")
+            android.util.Log.d("BluetoothGattCallback","onPhyRead: txPhy: $txPhy, rxPhy: $rxPhy, status: $status")
         }
         override fun onPhyUpdate(gatt: BluetoothGatt?, txPhy: Int, rxPhy: Int, status: Int) {
-            android.util.Log.d("test","onPhyUpdate: txPhy: $txPhy, rxPhy: $rxPhy, status: $status")
+            android.util.Log.d("BluetoothGattCallback","onPhyUpdate: txPhy: $txPhy, rxPhy: $rxPhy, status: $status")
         }
         override fun onReadRemoteRssi(gatt: BluetoothGatt?, rssi: Int, status: Int) {
-            android.util.Log.d("test","onReadRemoteRssi: rssi: $rssi, status: $status")
+            android.util.Log.d("BluetoothGattCallback","onReadRemoteRssi: rssi: $rssi, status: $status")
         }
         override fun onReliableWriteCompleted(gatt: BluetoothGatt?, status: Int) {
-            android.util.Log.d("test","onReliableWriteCompleted: status: $status")
+            android.util.Log.d("BluetoothGattCallback","onReliableWriteCompleted: status: $status")
         }
         override fun onServiceChanged(gatt: BluetoothGatt) {
-            android.util.Log.d("test","onServiceChanged")
+            android.util.Log.d("BluetoothGattCallback","onServiceChanged")
         }
         override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
-            android.util.Log.d("test","onServicesDiscovered: status: $status")
+            android.util.Log.d("BluetoothGattCallback","onServicesDiscovered: status: $status")
         }
         /*override fun onSubrateChanged(gatt: BluetoothGatt, subrate: Int, status: Int) {  //Erst in API36.1
             android.util.Log.d("test","onSubrateChanged: subrate: $subrate, status: $status")
@@ -248,15 +309,14 @@ class MainActivity  : AppCompatActivity() {
 
     public class myBluetoothAdvertiseCallback: AdvertiseCallback(){
         override fun onStartFailure(errorCode: Int) {
-            android.util.Log.d("test","onStartFailure: errorCode: $errorCode")
+            android.util.Log.d("BluetoothAdvertiseCallback","onStartFailure: errorCode: $errorCode")
         }
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
-            android.util.Log.d("test","onStartSuccess: settingsInEffect: $settingsInEffect")
+            android.util.Log.d("BluetoothAdvertiseCallback","onStartSuccess: settingsInEffect: $settingsInEffect")
         }
     }
 
-
-    public class myTransportHandle: TransportHandle{
+    /*public class myTransportHandle: TransportHandle{
         override fun registerReceiveCallback(
             p0: Executor,
             p1: TransportHandle.ReceiveCallback
@@ -272,8 +332,9 @@ class MainActivity  : AppCompatActivity() {
             TODO("Not yet implemented")
         }
 
-    }
-    public class myCallback: RangingSession.Callback
+    }*/
+
+    public class myRangingSessionCallback: RangingSession.Callback
     {
         override fun onClosed(p0: Int) {
             TODO("Not yet implemented")
@@ -305,6 +366,24 @@ class MainActivity  : AppCompatActivity() {
         override fun execute(r: Runnable) {
             r.run()
         }
+    }
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    public fun SendTestMessage(gatt:BluetoothGatt){
+
+        Log.d("TEST", "SendingTestData")
+        val byteArray = byteArrayOf(0x1,0x2,0x3,0x4,0x5,0x6,0x7,0x8,0x9,0xA,0xB,0xC,0xD,0xE,0xF)
+
+        val service = gatt.getService(SERVICE_UUID)
+        val characteristic = service.getCharacteristic(CHAR_UUID)
+
+
+        gatt.writeCharacteristic(
+            characteristic,
+            byteArray,
+            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+        )
+
     }
 
 
@@ -373,3 +452,128 @@ class MainActivity  : AppCompatActivity() {
         return x
     }
 }
+
+/*
+@RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+class BleServer(context: Context) {
+
+    private val bluetoothManager =
+        context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+    private val bluetoothAdapter = bluetoothManager.adapter
+    private val gattServer = bluetoothManager.openGattServer(context, gattServerCallback)
+
+    private val characteristic = BluetoothGattCharacteristic(
+        CHAR_UUID,
+        BluetoothGattCharacteristic.PROPERTY_WRITE or
+                BluetoothGattCharacteristic.PROPERTY_READ or
+                BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+        BluetoothGattCharacteristic.PERMISSION_WRITE or
+                BluetoothGattCharacteristic.PERMISSION_READ
+    )
+
+    init {
+        val service = BluetoothGattService(
+            SERVICE_UUID,
+            BluetoothGattService.SERVICE_TYPE_PRIMARY
+        )
+        service.addCharacteristic(characteristic)
+        gattServer.addService(service)
+    }
+
+    private val gattServerCallback = object : BluetoothGattServerCallback() {
+
+        override fun onCharacteristicWriteRequest(
+            device: BluetoothDevice,
+            requestId: Int,
+            characteristic: BluetoothGattCharacteristic,
+            preparedWrite: Boolean,
+            responseNeeded: Boolean,
+            offset: Int,
+            value: ByteArray
+        ) {
+            val received = value.toString(Charsets.UTF_8)
+            Log.d("BLE_SERVER", "Received: $received")
+
+            if (responseNeeded) {
+                gattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
+            }
+        }
+
+        override fun onCharacteristicReadRequest(
+            device: BluetoothDevice,
+            requestId: Int,
+            offset: Int,
+            characteristic: BluetoothGattCharacteristic
+        ) {
+            val message = "Hello from Server"
+            val bytes = message.toByteArray()
+
+            gattServer.sendResponse(
+                device,
+                requestId,
+                BluetoothGatt.GATT_SUCCESS,
+                0,
+                bytes
+            )
+        }
+    }
+
+    fun notifyClient(device: BluetoothDevice, message: String) {
+        characteristic.value = message.toByteArray()
+        gattServer.notifyCharacteristicChanged(device, characteristic, false)
+    }
+}
+
+class BleClient(private val context: Context) {
+
+    private var bluetoothGatt: BluetoothGatt? = null
+
+    fun connect(device: BluetoothDevice) {
+        bluetoothGatt = device.connectGatt(context, false, gattCallback)
+    }
+
+    private val gattCallback = object : BluetoothGattCallback() {
+
+        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+            if (newState == BluetoothProfile.STATE_CONNECTED) {
+                gatt.discoverServices()
+            }
+        }
+
+        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            val service = gatt.getService(SERVICE_UUID)
+            val characteristic = service.getCharacteristic(CHAR_UUID)
+
+            // Enable notifications
+            gatt.setCharacteristicNotification(characteristic, true)
+
+            // Read initial value
+            gatt.readCharacteristic(characteristic)
+        }
+
+        override fun onCharacteristicRead(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            status: Int
+        ) {
+            val value = characteristic.value.toString(Charsets.UTF_8)
+            Log.d("BLE_CLIENT", "Read: $value")
+        }
+
+        override fun onCharacteristicChanged(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic
+        ) {
+            val value = characteristic.value.toString(Charsets.UTF_8)
+            Log.d("BLE_CLIENT", "Notify: $value")
+        }
+    }
+
+    fun sendMessage(message: String) {
+        val service = bluetoothGatt?.getService(SERVICE_UUID) ?: return
+        val characteristic = service.getCharacteristic(CHAR_UUID)
+
+        characteristic.value = message.toByteArray()
+        bluetoothGatt?.writeCharacteristic(characteristic)
+    }
+}*/
