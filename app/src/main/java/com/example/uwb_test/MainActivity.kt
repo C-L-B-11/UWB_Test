@@ -2,31 +2,22 @@ package com.example.uwb_test
 
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothManager
-import android.bluetooth.BluetoothGattCallback
-import android.bluetooth.BluetoothGattCharacteristic
-import android.bluetooth.BluetoothGattDescriptor
-import android.bluetooth.BluetoothGattServer
-import android.bluetooth.BluetoothGattServerCallback
-import android.bluetooth.BluetoothGattService
-import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
-import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.ranging.RangingConfig
 import android.ranging.RangingData
 import android.ranging.RangingDevice
 import android.ranging.RangingManager
 import android.ranging.RangingSession
+import android.ranging.oob.TransportHandle
 import android.util.Log
-import android.view.View
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
@@ -41,12 +32,17 @@ import java.util.concurrent.Executor
 val SERVICE_UUID: UUID = UUID.fromString("0000180D-0000-1000-8000-00805f9b34fb")
 val CHAR_UUID: UUID = UUID.fromString("00002A37-0000-1000-8000-00805f9b34fb")
 
+const val SNIPPET_RECIEVED:Byte = 0
+const val SNIPPET_LAST:Byte = 1
+const val SNIPPET_INTERMEDIATE:Byte  = 2
+
 class MainActivity  : AppCompatActivity() {
 
     private var exception: TextView? = null
 
     private var tvSendText: EditText? = null
     private var tvRangeDisplay: TextView? = null
+    @SuppressLint("UseSwitchCompatOrMaterialCode")
     private var swIsController: Switch? = null
     private var start: Button? = null
 
@@ -57,21 +53,28 @@ class MainActivity  : AppCompatActivity() {
 
     private var gattServer : BleServer? = null
     private var gattClient : BleClient?=null
+    private var transportHandle : MyTransportHandle? = null
 
-    public val setText: (String)->Unit = { message: String ->
+    public val setText: (ByteArray)->Unit = { data: ByteArray ->
+        transportHandle?.receivedData(data)
         runOnUiThread {
-            exception?.setText(message)
+            val message = data.toString(Charsets.UTF_8)
+            exception?.text = message
         }
+    }
+
+    public val sendMsg: (ByteArray)->Unit = { data: ByteArray ->
+        sendMessage(data)
     }
 
     //private val scope = CoroutineScope(Dispatchers.IO)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_main);
         rangingManager = baseContext.getSystemService(RangingManager::class.java) as RangingManager
-        InitUI()
+        initUI()
         //uwbMan = UwbManager.createInstance(baseContext)
 
     }
@@ -79,25 +82,45 @@ class MainActivity  : AppCompatActivity() {
 
 
 
-    private fun InitUI() {
+    private fun initUI() {
 
         tvSendText = findViewById<EditText>(R.id.etSendText)
         tvRangeDisplay = findViewById<TextView>(R.id.rangeDisplay)
         swIsController = findViewById<Switch>(R.id.swIsController)
         exception = findViewById<TextView>(R.id.exception)
         start = findViewById<Button>(R.id.ConButton)
-        start!!.setOnClickListener  { v: View? -> connect() }
+        start!!.setOnClickListener  { _ -> connect() }
         sendMessageBtn = findViewById<Button>(R.id.MsgButton)
-        sendMessageBtn!!.setOnClickListener  { v: View? -> sendMessage() }
+        sendMessageBtn!!.setOnClickListener  { _ -> sendMessage() }
+
+        transportHandle = MyTransportHandle(sendMsg)
 
     }
 
-    public fun setText(message:String){
-        runOnUiThread {
-            exception?.setText(message)
+    private fun sendMessage(data:ByteArray){
+        if (ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
+
+
+        if(swIsController?.isChecked==false){
+            if(gattServer!=null){
+
+                gattServer?.sendMessage(data)
+            }
+        }
+        else
+        {
+            if(gattClient !=null){
+                gattClient?.sendMessage(data)
+            }
         }
     }
-
 
 
     private fun sendMessage(){
@@ -107,12 +130,6 @@ class MainActivity  : AppCompatActivity() {
                 Manifest.permission.BLUETOOTH_CONNECT
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            //
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-            //                                          int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
             return
         }
 
@@ -136,13 +153,14 @@ class MainActivity  : AppCompatActivity() {
 
 
 
+    @SuppressLint("SetTextI18n")
     @RequiresPermission(Manifest.permission.RANGING)
     private fun connect() {
-        val myRangingSessionCallback = myRangingSessionCallback()
+        /*val myRangingSessionCallback = MyRangingSessionCallback()
         val myExecuter = myExecutor()
-        //var mySession = rangingManager?.createRangingSession(myExecuter, myCallback)
+        var mySession = rangingManager?.createRangingSession(myExecuter, myCallback)
         var role=0
-        var config : RangingConfig
+        var config : RangingConfig*/
 
 
         if (
@@ -175,14 +193,14 @@ class MainActivity  : AppCompatActivity() {
                 ) != PackageManager.PERMISSION_GRANTED)
             )
             {
-            exception?.setText("No Permission")
+                exception?.text = "No Permission"
             return
             }
         }
-        var bMngr : BluetoothManager = (baseContext.getSystemService(BLUETOOTH_SERVICE) as BluetoothManager)
-        var list: List<BluetoothDevice> = bMngr.adapter.bondedDevices.toList()
-        var i =list.size
-        exception?.setText("found $i devices")
+        val bMngr : BluetoothManager = (baseContext.getSystemService(BLUETOOTH_SERVICE) as BluetoothManager)
+        val list: List<BluetoothDevice> = bMngr.adapter.bondedDevices.toList()
+        val i =list.size
+        exception?.text = "found $i devices"
 
 
 
@@ -190,21 +208,21 @@ class MainActivity  : AppCompatActivity() {
 
         if(i==0)
             return
-        var bDev = list[0]
+        val bDev = list[0]
         if(swIsController?.isChecked==false){
 
-            BLConnectionControlee_GattServer(bMngr)
+            blConnectionControleeGattServer(bMngr)
         }
         else {
 
-            BLConnectionControler_GattClient(bMngr)
-            BLConnectionControler_GattClient_GotScanResult(bDev)
+            blConnectionControllerGattClient(bMngr)
+            blConnectionControllerGattClientGotScanResult(bDev)
         }
 
 
         /*
         val rangingDevice = RangingDevice.Builder().setUuid(bDev.uuids[0].uuid).build()
-        val transportHandle = myTransportHandle()
+
         val deviceHandle: DeviceHandle = DeviceHandle.Builder(rangingDevice,transportHandle)
             .build()
 
@@ -231,42 +249,28 @@ class MainActivity  : AppCompatActivity() {
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
-    private fun BLConnectionControler_GattClient(bMngr: BluetoothManager){
-        var SC = bMngr.adapter.getBluetoothLeScanner()
-        if(SC==null)
-            return
+    private fun blConnectionControllerGattClient(bMngr: BluetoothManager){
+        val sc = bMngr.adapter.bluetoothLeScanner ?: return
 
-        var myScanCallback = myBluetoothScannerCallback()
-        SC.startScan(myScanCallback)
+        val myScanCallback = MyBluetoothScannerCallback()
+        sc.startScan(myScanCallback)
 
     }
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    public fun BLConnectionControler_GattClient_GotScanResult(blDevice : BluetoothDevice){
+    public fun blConnectionControllerGattClientGotScanResult(blDevice : BluetoothDevice){
 
         gattClient = BleClient(baseContext,  setText )
         gattClient?.connect(blDevice)
 
-        /*
-        var myCallback = myBluetoothGattCallback()
-
-        if (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            exception?.setText("no permission")
-            return
-        }
-        var gatt = blDevice.connectGatt(baseContext, false, myCallback)*/
-        Log.d("TEST", "ScanResult"+blDevice.toString())
+        Log.d("TEST", "ScanResult$blDevice")
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    private fun BLConnectionControlee_GattServer(bMngr:BluetoothManager){
-        var AS: AdvertiseSettings = AdvertiseSettings.Builder().setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED).setConnectable(true).setDiscoverable(true).setTimeout(10000).build()
-        var AD: AdvertiseData = AdvertiseData.Builder().setIncludeDeviceName(true).setIncludeTxPowerLevel(true).build()
-        var ACB = myBluetoothAdvertiseCallback()
-        bMngr.adapter?.bluetoothLeAdvertiser?.startAdvertising(AS, AD, ACB)
+    private fun blConnectionControleeGattServer(bMngr:BluetoothManager){
+        val advertiseSettings: AdvertiseSettings = AdvertiseSettings.Builder().setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED).setConnectable(true).setDiscoverable(true).setTimeout(10000).build()
+        val advertiseData: AdvertiseData = AdvertiseData.Builder().setIncludeDeviceName(true).setIncludeTxPowerLevel(true).build()
+        val advertiseCallback = MyBluetoothAdvertiseCallback()
+        bMngr.adapter?.bluetoothLeAdvertiser?.startAdvertising(advertiseSettings, advertiseData, advertiseCallback)
 
         gattServer = BleServer(baseContext,  setText)
         gattServer?.init(baseContext)
@@ -279,13 +283,13 @@ class MainActivity  : AppCompatActivity() {
 
 
 
-    public inner class myBluetoothScannerCallback: ScanCallback(){
+    public inner class MyBluetoothScannerCallback: ScanCallback(){
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         override fun onBatchScanResults(results : List<ScanResult> )
         {
-            var i = results.size
+            val i = results.size
             Log.d("ScanCallback","onBatchScanResults: $i devices")
-            BLConnectionControler_GattClient_GotScanResult(results[0].device)
+            blConnectionControllerGattClientGotScanResult(results[0].device)
         }
 
         override fun onScanFailed(errorCode : Int)
@@ -299,7 +303,7 @@ class MainActivity  : AppCompatActivity() {
         }
     }
 
-    public class myBluetoothAdvertiseCallback: AdvertiseCallback(){
+    public class MyBluetoothAdvertiseCallback: AdvertiseCallback(){
         override fun onStartFailure(errorCode: Int) {
             android.util.Log.d("BluetoothAdvertiseCallback","onStartFailure: errorCode: $errorCode")
         }
@@ -308,26 +312,36 @@ class MainActivity  : AppCompatActivity() {
         }
     }
 
-    /*public class myTransportHandle: TransportHandle{
+    public class MyTransportHandle(val sendDataFunc : (ByteArray)->Unit): TransportHandle {
+        var callbackExecuter : Executor? = null
+        var callbackFunction : TransportHandle.ReceiveCallback? = null
+
+
         override fun registerReceiveCallback(
             p0: Executor,
             p1: TransportHandle.ReceiveCallback
         ) {
-            TODO("Not yet implemented")
+            callbackExecuter = p0
+            callbackFunction = p1
         }
 
         override fun sendData(p0: ByteArray) {
-            TODO("Not yet implemented")
+            sendDataFunc(p0)
         }
 
         override fun close() {
             TODO("Not yet implemented")
         }
 
-    }*/
+        fun receivedData(p0: ByteArray){
+            if(callbackExecuter!= null)
+                callbackExecuter?.run {callbackFunction?.onReceiveData(p0)  }
 
-    public class myRangingSessionCallback: RangingSession.Callback
-    {
+        }
+
+    }
+
+    public class MyRangingSessionCallback: RangingSession.Callback{
         override fun onClosed(p0: Int) {
             TODO("Not yet implemented")
         }
@@ -354,15 +368,14 @@ class MainActivity  : AppCompatActivity() {
 
     }
 
-    public class myExecutor : Executor {
+    public class MyExecutor : Executor {
         override fun execute(r: Runnable) {
             r.run()
         }
     }
 
 
-
-
+    /*
     private fun ParseStringToInt(s: String):Int{
         var x = 0
         for(c in s.toCharArray())
@@ -425,167 +438,8 @@ class MainActivity  : AppCompatActivity() {
             else -> x=-1
         }
         return x
-    }
+    }*/
 }
 
 
 
-
-
-class BleServer(context : Context, rF:(String)->Unit) {
-
-    private val bluetoothManager =
-        context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-
-    private var myDevice: BluetoothDevice? = null
-
-    private val retFunc: (String)->Unit = rF
-
-    public val characteristic = BluetoothGattCharacteristic(
-        CHAR_UUID,
-        BluetoothGattCharacteristic.PROPERTY_WRITE or
-                BluetoothGattCharacteristic.PROPERTY_READ or
-                BluetoothGattCharacteristic.PROPERTY_NOTIFY,
-        BluetoothGattCharacteristic.PERMISSION_WRITE or
-                BluetoothGattCharacteristic.PERMISSION_READ
-    )
-
-
-
-    private val gattServerCallback = object : BluetoothGattServerCallback() {
-
-        override fun onConnectionStateChange(device: BluetoothDevice?, status: Int, newState: Int) {
-            if(newState == BluetoothProfile.STATE_CONNECTED){
-                myDevice = device
-                Log.d("BLE_SERVER","Connected: $device")
-            }
-
-        }
-
-
-
-        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-        override fun onCharacteristicWriteRequest(
-            device: BluetoothDevice,
-            requestId: Int,
-            characteristic: BluetoothGattCharacteristic,
-            preparedWrite: Boolean,
-            responseNeeded: Boolean,
-            offset: Int,
-            value: ByteArray
-        ) {
-            val received = value.toString(Charsets.UTF_8)
-
-            retFunc(received)
-
-            Log.d("BLE_SERVER", "Received: $received")
-
-            if (responseNeeded) {
-                gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
-            }
-        }
-
-        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-        override fun onCharacteristicReadRequest(
-            device: BluetoothDevice,
-            requestId: Int,
-            offset: Int,
-            characteristic: BluetoothGattCharacteristic
-        ) {
-            val message = "Hello from Server"
-            val bytes = message.toByteArray()
-
-            gattServer?.sendResponse(device,requestId,BluetoothGatt.GATT_SUCCESS,0,bytes)
-        }
-    }
-    private var gattServer : BluetoothGattServer? = null
-
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    fun init(context :Context) {
-        gattServer = bluetoothManager.openGattServer(context, gattServerCallback)
-        val service = BluetoothGattService(
-            SERVICE_UUID,
-            BluetoothGattService.SERVICE_TYPE_PRIMARY
-        )
-        service.addCharacteristic(characteristic)
-        gattServer?.addService(service)
-    }
-
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    fun sendMessage( message: String) {
-
-        val value = message.toByteArray()
-        if(myDevice!=null) {
-            val d:BluetoothDevice = myDevice!!
-            gattServer?.notifyCharacteristicChanged(d, characteristic, false, value)
-            Log.d("BLE_SERVER","MessageSend")
-        }
-    }
-}
-
-class BleClient(private val context: Context, rF:(String)->Unit) {
-
-    private var bluetoothGatt: BluetoothGatt? = null
-
-    private val retFunc: (String) -> Unit = rF
-
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    fun connect(device: BluetoothDevice) {
-        bluetoothGatt = device.connectGatt(context, false, gattCallback)
-    }
-
-    private val gattCallback = object : BluetoothGattCallback() {
-
-        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-            if (newState == BluetoothProfile.STATE_CONNECTED) {
-                gatt.discoverServices()
-            }
-        }
-
-        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-            val service = gatt.getService(SERVICE_UUID)
-            val characteristic = service.getCharacteristic(CHAR_UUID)
-            //Log.d("BLE_CLIENT","discovered Services")
-            // Enable notifications
-            gatt.setCharacteristicNotification(characteristic, true)
-
-            // Read initial value
-            gatt.readCharacteristic(characteristic)
-        }
-
-        override fun onCharacteristicRead(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            value: ByteArray,
-            status: Int
-        ) {
-
-            //val message = value.toString(Charsets.UTF_8)
-            //Log.d("BLE_CLIENT", "Read: $value")
-
-        }
-
-        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-        override fun onCharacteristicChanged(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            value:ByteArray
-        ) {
-
-            val message = value.toString(Charsets.UTF_8)
-            retFunc(message)
-            Log.d("BLE_CLIENT", "Notify:$message")
-        }
-    }
-
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    fun sendMessage(message: String) {
-        val service = bluetoothGatt?.getService(SERVICE_UUID) ?: return
-        val characteristic = service.getCharacteristic(CHAR_UUID)
-
-        val value = message.toByteArray()
-        bluetoothGatt?.writeCharacteristic(characteristic, value, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
-    }
-}
