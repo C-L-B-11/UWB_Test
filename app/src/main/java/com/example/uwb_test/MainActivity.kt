@@ -12,10 +12,15 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.ranging.RangingConfig
 import android.ranging.RangingData
 import android.ranging.RangingDevice
 import android.ranging.RangingManager
+import android.ranging.RangingPreference
 import android.ranging.RangingSession
+import android.ranging.oob.DeviceHandle
+import android.ranging.oob.OobInitiatorRangingConfig
+import android.ranging.oob.OobResponderRangingConfig
 import android.ranging.oob.TransportHandle
 import android.util.Log
 import android.view.WindowManager
@@ -133,7 +138,7 @@ class MainActivity  : AppCompatActivity() {
             return
         }
 
-        val message = tvSendText?.text.toString()
+        /*val message = tvSendText?.text.toString()
 
         if(swIsController?.isChecked==false){
             if(gattServer!=null){
@@ -146,7 +151,40 @@ class MainActivity  : AppCompatActivity() {
             if(gattClient !=null){
                 gattClient?.sendMessage(message)
             }
+        }*/
+
+
+        val myRangingSessionCallback = MyRangingSessionCallback()
+        val myExecuter = MyExecutor()
+        val mySession = rangingManager?.createRangingSession(myExecuter, myRangingSessionCallback)
+        var role=0
+        var config : RangingConfig
+
+        val rangingDevice = RangingDevice.Builder().build()
+
+        val deviceHandle: DeviceHandle = DeviceHandle.Builder(rangingDevice,transportHandle!!)
+            .build()
+
+
+
+        if(swIsController?.isChecked == true) {
+            role= RangingPreference.DEVICE_ROLE_INITIATOR
+            config = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).build()
+
         }
+        else
+        {
+            role = RangingPreference.DEVICE_ROLE_RESPONDER
+            config = (OobResponderRangingConfig.Builder( deviceHandle).build())
+
+        }
+
+        val rangingPreference: RangingPreference =  RangingPreference.Builder(role, config).build()
+
+        //val myRangingPreference = RangingPreference.Builder();
+        mySession?.start(rangingPreference)
+
+
 
     }
 
@@ -326,6 +364,7 @@ class MainActivity  : AppCompatActivity() {
         }
 
         override fun sendData(p0: ByteArray) {
+            Log.d("TransportHandle","sending Data ${p0.toString()}")
             sendDataFunc(p0)
         }
 
@@ -334,6 +373,7 @@ class MainActivity  : AppCompatActivity() {
         }
 
         fun receivedData(p0: ByteArray){
+            Log.d("TransportHandle","recieved Data ${p0.toString()}")
             if(callbackExecuter!= null)
                 callbackExecuter?.run {callbackFunction?.onReceiveData(p0)  }
 
@@ -343,27 +383,28 @@ class MainActivity  : AppCompatActivity() {
 
     public class MyRangingSessionCallback: RangingSession.Callback{
         override fun onClosed(p0: Int) {
-            TODO("Not yet implemented")
+            Log.d("RangingResult","onClosed: $p0")
         }
 
         override fun onOpenFailed(p0: Int) {
-            TODO("Not yet implemented")
+            Log.d("RangingResult","onOpenFailed: $p0")
         }
 
         override fun onOpened() {
-            TODO("Not yet implemented")
+            Log.d("RangingResult","onOpened")
         }
 
         override fun onResults(p0: RangingDevice, p1: RangingData) {
-            TODO("Not yet implemented")
+            val dist = p1.distance?.measurement
+            Log.d("RangingResult","onResults: $dist")
         }
 
         override fun onStarted(p0: RangingDevice, p1: Int) {
-            TODO("Not yet implemented")
+            Log.d("RangingResult","onStarted $p1")
         }
 
         override fun onStopped(p0: RangingDevice, p1: Int) {
-            TODO("Not yet implemented")
+            Log.d("RangingResult","onStopped $p1")
         }
 
     }

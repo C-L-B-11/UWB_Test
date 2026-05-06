@@ -60,7 +60,7 @@ class BleServer(context : Context, rF:(ByteArray)->Unit) {
             value: ByteArray
         ) {
             val received = value.toString(Charsets.UTF_8)
-            Log.d("BLE_SERVER", "Received: $received")
+            //Log.d("BLE_SERVER", "Received: $received")
 
             val mode:Byte = value[0]
             if(mode==SNIPPET_RECIEVED){
@@ -170,7 +170,7 @@ class BleServer(context : Context, rF:(ByteArray)->Unit) {
         if(myDevice!=null){
             val d:BluetoothDevice = myDevice!!
             gattServer?.notifyCharacteristicChanged(d, characteristic, false, sendData)
-            Log.d("BLE_SERVER","MessageSend")
+            //Log.d("BLE_SERVER","MessageSend")
         }
     }
 

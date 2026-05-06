@@ -65,7 +65,7 @@ class BleClient(private val context: Context, rF:(ByteArray)->Unit) {
             value:ByteArray
         ) {
             val message = value.toString(Charsets.UTF_8)
-            Log.d("BLE_CLIENT", "Notify:$message")
+            //Log.d("BLE_CLIENT", "Notify:$message")
 
             val mode:Byte = value[0]
             if(mode==SNIPPET_RECIEVED){
