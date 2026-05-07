@@ -60,10 +60,13 @@ class BleServer(context : Context, rF:(ByteArray)->Unit) {
             value: ByteArray
         ) {
             val received = value.toString(Charsets.UTF_8)
-            //Log.d("BLE_SERVER", "Received: $received")
+            Log.d("BLE_SERVER", "recvFragment: ${MainActivity.byteToHexString(value)}")
 
             val mode:Byte = value[0]
             if(mode==SNIPPET_RECIEVED){
+                if (responseNeeded) {
+                    gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
+                }
                 startSend()
                 return
             }
@@ -170,7 +173,7 @@ class BleServer(context : Context, rF:(ByteArray)->Unit) {
         if(myDevice!=null){
             val d:BluetoothDevice = myDevice!!
             gattServer?.notifyCharacteristicChanged(d, characteristic, false, sendData)
-            //Log.d("BLE_SERVER","MessageSend")
+            Log.d("BLE_SERVER","sendFragment: ${MainActivity.byteToHexString(sendData)}")
         }
     }
 

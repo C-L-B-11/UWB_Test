@@ -65,7 +65,7 @@ class BleClient(private val context: Context, rF:(ByteArray)->Unit) {
             value:ByteArray
         ) {
             val message = value.toString(Charsets.UTF_8)
-            //Log.d("BLE_CLIENT", "Notify:$message")
+            Log.d("BLE_CLIENT", "recvFragment:${MainActivity.byteToHexString(value)}")
 
             val mode:Byte = value[0]
             if(mode==SNIPPET_RECIEVED){
@@ -143,7 +143,7 @@ class BleClient(private val context: Context, rF:(ByteArray)->Unit) {
 
         val service = bluetoothGatt?.getService(SERVICE_UUID) ?: return
         val characteristic = service.getCharacteristic(CHAR_UUID)
-
+        Log.d("BLE_CLIENT","sendFragment: ${MainActivity.byteToHexString(sendData)}")
 
         bluetoothGatt?.writeCharacteristic(characteristic, sendData, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
     }

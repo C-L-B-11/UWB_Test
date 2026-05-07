@@ -11,6 +11,7 @@ import android.bluetooth.le.AdvertiseSettings
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.ranging.RangingConfig
 import android.ranging.RangingData
@@ -28,11 +29,13 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.Switch
 import android.widget.TextView
+import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import java.util.UUID
 import java.util.concurrent.Executor
+import kotlin.experimental.and
 
 val SERVICE_UUID: UUID = UUID.fromString("0000180D-0000-1000-8000-00805f9b34fb")
 val CHAR_UUID: UUID = UUID.fromString("00002A37-0000-1000-8000-00805f9b34fb")
@@ -128,6 +131,8 @@ class MainActivity  : AppCompatActivity() {
     }
 
 
+
+    @SuppressLint("NewApi")
     private fun sendMessage(){
 
         if (ActivityCompat.checkSelfPermission(
@@ -155,8 +160,8 @@ class MainActivity  : AppCompatActivity() {
 
 
         val myRangingSessionCallback = MyRangingSessionCallback()
-        val myExecuter = MyExecutor()
-        val mySession = rangingManager?.createRangingSession(myExecuter, myRangingSessionCallback)
+        val myExecutor = MyExecutor()
+        val mySession = rangingManager?.createRangingSession(myExecutor, myRangingSessionCallback)
         var role=0
         var config : RangingConfig
 
@@ -169,7 +174,8 @@ class MainActivity  : AppCompatActivity() {
 
         if(swIsController?.isChecked == true) {
             role= RangingPreference.DEVICE_ROLE_INITIATOR
-            config = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).build()
+            val filter: Set<Int> = setOf(RangingManager.BLE_CS,RangingManager.WIFI_NAN_RTT)
+            config = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).setRangingTechnologyFilter(filter).build()
 
         }
         else
@@ -350,7 +356,7 @@ class MainActivity  : AppCompatActivity() {
         }
     }
 
-    public class MyTransportHandle(val sendDataFunc : (ByteArray)->Unit): TransportHandle {
+    public inner class MyTransportHandle(val sendDataFunc : (ByteArray)->Unit): TransportHandle {
         var callbackExecuter : Executor? = null
         var callbackFunction : TransportHandle.ReceiveCallback? = null
 
@@ -364,16 +370,18 @@ class MainActivity  : AppCompatActivity() {
         }
 
         override fun sendData(p0: ByteArray) {
-            Log.d("TransportHandle","sending Data ${p0.toString()}")
+            val s = byteToHexString(p0)
+            Log.d("TransportHandle","sending Data $s")
             sendDataFunc(p0)
         }
 
         override fun close() {
-            TODO("Not yet implemented")
+            Log.d("TransportHandle","close")
         }
 
         fun receivedData(p0: ByteArray){
-            Log.d("TransportHandle","recieved Data ${p0.toString()}")
+            val s = byteToHexString(p0)
+            Log.d("TransportHandle","recieved Data $s")
             if(callbackExecuter!= null)
                 callbackExecuter?.run {callbackFunction?.onReceiveData(p0)  }
 
@@ -395,8 +403,8 @@ class MainActivity  : AppCompatActivity() {
         }
 
         override fun onResults(p0: RangingDevice, p1: RangingData) {
-            val dist = p1.distance?.measurement
-            Log.d("RangingResult","onResults: $dist")
+
+            Log.d("RangingResult","onResults: $p1")
         }
 
         override fun onStarted(p0: RangingDevice, p1: Int) {
@@ -480,6 +488,41 @@ class MainActivity  : AppCompatActivity() {
         }
         return x
     }*/
+
+    companion object {
+    public fun byteToHexString(data:ByteArray):String{
+        var s = ""
+        for(b in data)
+        {
+            s+= Bit4ToHex((b.toInt() shr 4).toByte())
+            s+= Bit4ToHex(b)
+            s+=';'
+        }
+        return s
+    }
+    public fun Bit4ToHex(data:Byte):Char{
+        val data2 :Int = (data and 0xF).toInt()
+        when(data2){
+            0 -> return '0'
+            1 -> return '1'
+            2 -> return '2'
+            3 -> return '3'
+            4 -> return '4'
+            5 -> return '5'
+            6 -> return '6'
+            7 -> return '7'
+            8 -> return '8'
+            9 -> return '9'
+            10 -> return 'A'
+            11 -> return 'B'
+            12 -> return 'C'
+            13 -> return 'D'
+            14 -> return 'E'
+            15 -> return 'F'
+            else -> return 'X'
+        }
+    }
+    }
 }
 
 
