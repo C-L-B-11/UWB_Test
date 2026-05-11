@@ -1,6 +1,7 @@
 package com.example.uwb_test
 
 import android.Manifest
+
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
@@ -15,7 +16,7 @@ import androidx.annotation.RequiresPermission
 import kotlin.jvm.Throws
 
 
-class BleServer(context : Context, rF:(ByteArray)->Unit) {
+class BleServer(context : Context, rF:(ByteArray)->Unit,cF:()->Unit) {
 
     private val bluetoothManager =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -23,6 +24,7 @@ class BleServer(context : Context, rF:(ByteArray)->Unit) {
     private var myDevice: BluetoothDevice? = null
 
     private val retFunc: (ByteArray)->Unit = rF
+    private val conFunc: ()->Unit = cF
     private var sendMessageBuffer : ByteArray? = null
     private var recvMessageBuffer : ByteArray? = null
 
@@ -43,6 +45,7 @@ class BleServer(context : Context, rF:(ByteArray)->Unit) {
             if(newState == BluetoothProfile.STATE_CONNECTED){
                 myDevice = device
                 Log.d("BLE_SERVER","Connected: $device")
+                conFunc()
             }
 
         }
@@ -125,11 +128,20 @@ class BleServer(context : Context, rF:(ByteArray)->Unit) {
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    fun disconnect(): Boolean {
+        if(bluetoothManager.getConnectedDevices(BluetoothProfile.GATT_SERVER).size==0){
+            gattServer?.close()
+            return true
+        }
+        return false
+    }
+
+    /*@RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     fun sendMessage( message: String) {
 
         val value = message.toByteArray()
         sendMessage(value)
-    }
+    }*/
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     fun sendMessage( data:ByteArray) {
         if(sendMessageBuffer!=null){

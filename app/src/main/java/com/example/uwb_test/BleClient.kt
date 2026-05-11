@@ -11,11 +11,13 @@ import android.util.Log
 import androidx.annotation.RequiresPermission
 
 
-class BleClient(private val context: Context, rF:(ByteArray)->Unit) {
+class BleClient(private val context: Context, rF:(ByteArray)->Unit,cF : ()->Unit) {
 
     private var bluetoothGatt: BluetoothGatt? = null
 
     private val retFunc: (ByteArray) -> Unit = rF
+
+    private val conFunc:()->Unit = cF
 
     private var sendMessageBuffer : ByteArray? = null
     private var recvMessageBuffer : ByteArray? = null
@@ -25,6 +27,10 @@ class BleClient(private val context: Context, rF:(ByteArray)->Unit) {
         bluetoothGatt = device.connectGatt(context, false, gattCallback)
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    fun disconnect(){
+        bluetoothGatt?.close()
+    }
     private val gattCallback = object : BluetoothGattCallback() {
 
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
@@ -41,7 +47,7 @@ class BleClient(private val context: Context, rF:(ByteArray)->Unit) {
             //Log.d("BLE_CLIENT","discovered Services")
             // Enable notifications
             gatt.setCharacteristicNotification(characteristic, true)
-
+            conFunc()
             // Read initial value
             //gatt.readCharacteristic(characteristic)
         }
@@ -92,11 +98,11 @@ class BleClient(private val context: Context, rF:(ByteArray)->Unit) {
         }
     }
 
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    /*@RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     fun sendMessage(message: String) {
         val value = message.toByteArray()
         sendMessage(value)
-    }
+    }*/
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     fun sendMessage(data: ByteArray) {
