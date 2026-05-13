@@ -59,24 +59,16 @@ class MainActivity  : AppCompatActivity() {
     //private var uwbMan: UwbManager? = null
     private var rangingManager :RangingManager? = null
 
-    private var gattServer : BleServer? = null
-    private var gattClient : BleClient?=null
+    private var oobConnector : OobConnection? = null
+
     private var transportHandle : MyTransportHandle? = null
 
     private var rangingSession : RangingSession? = null
 
-    val setText: (ByteArray)->Unit = { data: ByteArray ->
-        receivedMessage(data)
-    }
 
-    val sendMsg: (ByteArray)->Unit = { data: ByteArray ->
-        sendMessage(data)
-    }
-    val connectionEstablished: ()->Unit = {
-        runOnUiThread {
-            startMeasuringButton?.isEnabled=true
-        }
-    }
+
+
+
 
     //private val scope = CoroutineScope(Dispatchers.IO)
 
@@ -109,38 +101,8 @@ class MainActivity  : AppCompatActivity() {
         stopMeasuringButton!!.setOnClickListener  { _ -> stopMeasuring() }
 
 
-        transportHandle = MyTransportHandle(sendMsg)
+        transportHandle = MyTransportHandle()
 
-    }
-
-    private fun receivedMessage(data:ByteArray){
-        transportHandle?.receivedData(data)
-        runOnUiThread {
-            val message = data.toString(Charsets.UTF_8)
-            exception?.text = message
-        }
-    }
-    private fun sendMessage(data:ByteArray){
-        if (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            return
-        }
-
-        if(swIsController?.isChecked==false){
-            if(gattServer!=null){
-
-                gattServer?.sendMessage(data)
-            }
-        }
-        else
-        {
-            if(gattClient !=null){
-                gattClient?.sendMessage(data)
-            }
-        }
     }
 
     private fun stopMeasuring(){
@@ -225,179 +187,34 @@ class MainActivity  : AppCompatActivity() {
 
     @SuppressLint("SetTextI18n")
     private fun disconnect(){
-        if (
-            (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) != PackageManager.PERMISSION_GRANTED)
-        )
+        if ((ActivityCompat.checkSelfPermission(this,Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED))
         {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_ADVERTISE,Manifest.permission.BLUETOOTH_SCAN),1)
-            if ((ActivityCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.BLUETOOTH_CONNECT
-                ) != PackageManager.PERMISSION_GRANTED)
-            )
-            {
-                exception?.text = "No Permission"
-                return
-            }
+            if ((ActivityCompat.checkSelfPermission(this,Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED))
+            {exception?.text = "No Permission";return}
         }
 
-        if(gattServer!=null && gattClient==null){
-            if(gattServer?.disconnect() == true){
-                gattServer=null
-            }
-            else{
-                exception?.text = "Still has connected Devices"
-                Log.d("MainActivity","Still has connected Devices")
-                return
-            }
+        if(oobConnector!=null ) {
+            oobConnector?.disconnect()
         }
-        else if(gattServer==null && gattClient!=null){
-            gattClient!!.disconnect()
-            gattClient=null
-        }
-        else
-        {
-            exception?.text = "Connection State undefined"
-            Log.d("MainActivity","Connection State undefined")
-            return
-        }
-        connectButton?.isEnabled=true
-        disconnectButton?.isEnabled=false
-        startMeasuringButton?.isEnabled = false
     }
+
     @SuppressLint("SetTextI18n")
     @RequiresPermission(Manifest.permission.RANGING)
     private fun connect() {
 
-
-        if (
-            (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) != PackageManager.PERMISSION_GRANTED)
-            || (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_ADVERTISE
-            ) != PackageManager.PERMISSION_GRANTED)
-            || (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_SCAN
-            ) != PackageManager.PERMISSION_GRANTED)
-        )
-        {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_ADVERTISE,Manifest.permission.BLUETOOTH_SCAN),1)
-            if ((ActivityCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.BLUETOOTH_CONNECT
-                ) != PackageManager.PERMISSION_GRANTED)
-                || (ActivityCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.BLUETOOTH_ADVERTISE
-                ) != PackageManager.PERMISSION_GRANTED)
-                || (ActivityCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.BLUETOOTH_SCAN
-                ) != PackageManager.PERMISSION_GRANTED)
-            )
-            {
-                exception?.text = "No Permission"
-            return
-            }
-        }
-        val bMngr : BluetoothManager = (baseContext.getSystemService(BLUETOOTH_SERVICE) as BluetoothManager)
-        val list: List<BluetoothDevice> = bMngr.adapter.bondedDevices.toList()
-        val i =list.size
-        exception?.text = "found $i devices"
-
-
-        if(i==0)
-            return
-        val bDev = list[0]
         if(swIsController?.isChecked==false){
-
-            blConnectionControleeGattServer(bMngr)
+            oobConnector = BleServer(baseContext,  transportHandle as OobConnectionCallback)
         }
         else {
-
-            blConnectionControllerGattClient(bMngr)
-            blConnectionControllerGattClientGotScanResult(bDev)
+            oobConnector = BleClient(baseContext,  transportHandle as OobConnectionCallback)
         }
-    }
-
-    @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
-    private fun blConnectionControllerGattClient(bMngr: BluetoothManager){
-        val sc = bMngr.adapter.bluetoothLeScanner ?: return
-
-        val myScanCallback = MyBluetoothScannerCallback()
-        sc.startScan(myScanCallback)
-
-    }
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    public fun blConnectionControllerGattClientGotScanResult(blDevice : BluetoothDevice){
-
-        gattClient = BleClient(baseContext,  setText , connectionEstablished)
-        gattClient?.connect(blDevice)
-
-        Log.d("TEST", "ScanResult$blDevice")
-
         connectButton?.isEnabled=false
         disconnectButton?.isEnabled=true
-
-    }
-
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    private fun blConnectionControleeGattServer(bMngr:BluetoothManager){
-        val advertiseSettings: AdvertiseSettings = AdvertiseSettings.Builder().setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED).setConnectable(true).setDiscoverable(true).setTimeout(10000).build()
-        val advertiseData: AdvertiseData = AdvertiseData.Builder().setIncludeDeviceName(true).setIncludeTxPowerLevel(true).build()
-        val advertiseCallback = MyBluetoothAdvertiseCallback()
-        bMngr.adapter?.bluetoothLeAdvertiser?.startAdvertising(advertiseSettings, advertiseData, advertiseCallback)
-
-        gattServer = BleServer(baseContext,  setText,connectionEstablished)
-        gattServer?.init(baseContext)
-        connectButton?.isEnabled=false
-        disconnectButton?.isEnabled=true
-
     }
 
 
-
-
-
-
-
-    public inner class MyBluetoothScannerCallback: ScanCallback(){
-        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-        override fun onBatchScanResults(results : List<ScanResult> )
-        {
-            val i = results.size
-            Log.d("ScanCallback","onBatchScanResults: $i devices")
-            blConnectionControllerGattClientGotScanResult(results[0].device)
-        }
-
-        override fun onScanFailed(errorCode : Int)
-        {
-            Log.d("ScanCallback","onScanFailed: $errorCode")
-        }
-
-        override fun onScanResult(callbackType : Int,result : ScanResult )
-        {
-            Log.d("ScanCallback","onScanResult: $callbackType")
-        }
-    }
-
-    public class MyBluetoothAdvertiseCallback: AdvertiseCallback(){
-        override fun onStartFailure(errorCode: Int) {
-            Log.d("BluetoothAdvertiseCallback","onStartFailure: errorCode: $errorCode")
-        }
-        override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
-            Log.d("BluetoothAdvertiseCallback","onStartSuccess: settingsInEffect: $settingsInEffect")
-        }
-    }
-
-    public inner class MyTransportHandle(val sendDataFunc : (ByteArray)->Unit): TransportHandle {
+    public inner class MyTransportHandle(): TransportHandle,OobConnectionCallback {
         var callbackExecuter : Executor? = null
         var callbackFunction : TransportHandle.ReceiveCallback? = null
 
@@ -413,19 +230,34 @@ class MainActivity  : AppCompatActivity() {
         override fun sendData(p0: ByteArray) {
             val s = byteToHexString(p0)
             Log.d("TransportHandle","sending Data $s")
-            sendDataFunc(p0)
+            oobConnector?.sendMessage(p0)
         }
 
         override fun close() {
             Log.d("TransportHandle","close")
         }
 
-        fun receivedData(p0: ByteArray){
-            val s = byteToHexString(p0)
-            Log.d("TransportHandle","recieved Data $s")
-            if(callbackExecuter!= null)
-                callbackExecuter?.run {callbackFunction?.onReceiveData(p0)  }
 
+        override fun connectionEstablished() {
+            Log.d("TransportHandle","connection established")
+            runOnUiThread {
+                startMeasuringButton?.isEnabled=true
+            }
+        }
+
+        override fun connectionClosed() {
+            Log.d("TransportHandle","connection closed")
+            oobConnector = null
+            connectButton?.isEnabled=true
+            disconnectButton?.isEnabled=false
+            startMeasuringButton?.isEnabled = false
+        }
+
+        override fun messageRecieved(data: ByteArray) {
+            val s = byteToHexString(data)
+            Log.d("TransportHandle","message Recieved $s")
+            if(callbackExecuter!= null)
+                callbackExecuter?.run {callbackFunction?.onReceiveData(data)  }
         }
 
     }
@@ -485,14 +317,14 @@ class MainActivity  : AppCompatActivity() {
         }
     }
 
-    public interface oobConnection{
+    public interface OobConnection{
         abstract fun sendMessage(data: ByteArray)
         abstract fun isInitiator():Boolean
         abstract fun disconnect()
-        abstract fun connect(device: BluetoothDevice)
+
     }
 
-    public interface oobConnectionCallback{
+    public interface OobConnectionCallback{
         abstract fun connectionEstablished()
         abstract fun connectionClosed()
         abstract fun messageRecieved(data:ByteArray)

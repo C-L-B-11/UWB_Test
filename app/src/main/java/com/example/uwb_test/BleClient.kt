@@ -1,36 +1,33 @@
 package com.example.uwb_test
 
 import android.Manifest
+import android.app.Activity
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanResult
 import android.content.Context
+import android.content.pm.PackageManager
 import android.util.Log
 import androidx.annotation.RequiresPermission
+import androidx.core.app.ActivityCompat
 
 
-class BleClient(private val context: Context, rF:(ByteArray)->Unit,cF : ()->Unit) {
+class BleClient(private val context: Context,private val callback: MainActivity.OobConnectionCallback):MainActivity.OobConnection {
 
+    private val bluetoothManager =
+        context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private var bluetoothGatt: BluetoothGatt? = null
 
-    private val retFunc: (ByteArray) -> Unit = rF
 
-    private val conFunc:()->Unit = cF
 
     private var sendMessageBuffer : ByteArray? = null
     private var recvMessageBuffer : ByteArray? = null
 
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    fun connect(device: BluetoothDevice) {
-        bluetoothGatt = device.connectGatt(context, false, gattCallback)
-    }
-
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    fun disconnect(){
-        bluetoothGatt?.close()
-    }
     private val gattCallback = object : BluetoothGattCallback() {
 
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
@@ -38,16 +35,20 @@ class BleClient(private val context: Context, rF:(ByteArray)->Unit,cF : ()->Unit
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 gatt.discoverServices()
             }
+            else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                Log.d("BLE_CLIENT","Disconnected")
+                callback.connectionClosed()
+            }
         }
 
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             val service = gatt.getService(SERVICE_UUID)
             val characteristic = service.getCharacteristic(CHAR_UUID)
-            //Log.d("BLE_CLIENT","discovered Services")
+            Log.d("BLE_CLIENT","discovered Services")
             // Enable notifications
             gatt.setCharacteristicNotification(characteristic, true)
-            conFunc()
+            callback.connectionEstablished()
             // Read initial value
             //gatt.readCharacteristic(characteristic)
         }
@@ -88,7 +89,7 @@ class BleClient(private val context: Context, rF:(ByteArray)->Unit,cF : ()->Unit
             if(mode==SNIPPET_LAST){
                 data = recvMessageBuffer!!
                 recvMessageBuffer=null
-                retFunc(data)
+                callback.messageRecieved(data)
             }
 
             if(mode==SNIPPET_INTERMEDIATE){
@@ -97,7 +98,103 @@ class BleClient(private val context: Context, rF:(ByteArray)->Unit,cF : ()->Unit
             }
         }
     }
+    init{
+        var flag=true
+        if (
+            (ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) != PackageManager.PERMISSION_GRANTED)
+            || (ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_ADVERTISE
+            ) != PackageManager.PERMISSION_GRANTED)
+            || (ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_SCAN
+            ) != PackageManager.PERMISSION_GRANTED)
+        )
+        {
+            ActivityCompat.requestPermissions(context as Activity, arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_ADVERTISE,Manifest.permission.BLUETOOTH_SCAN),1)
+            if ((ActivityCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) != PackageManager.PERMISSION_GRANTED)
+                || (ActivityCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.BLUETOOTH_ADVERTISE
+                ) != PackageManager.PERMISSION_GRANTED)
+                || (ActivityCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.BLUETOOTH_SCAN
+                ) != PackageManager.PERMISSION_GRANTED)
+            )
+            {
+                Log.d("BleClient","No Permission")
+                flag = false
+            }
+        }
+        if(flag){
+            val sc = bluetoothManager.adapter.bluetoothLeScanner
+            if(sc!=null){
+                val myScanCallback = MyBluetoothScannerCallback()
+                    Log.d("BleClient","Start Scanning")
+                sc.startScan(myScanCallback)
 
+                val list: List<BluetoothDevice> = bluetoothManager.adapter.bondedDevices.toList()
+                val i =list.size
+                //exception?.text = "found $i devices"
+
+                if(i!=0) {
+                    val bDev : BluetoothDevice = list[0]
+                    if(bDev !=null)
+                        connect(bDev)
+                    else
+                        Log.d("BleClient","Null Device")
+                }
+                else
+                    Log.d("BleClient","No Devices")
+            }
+            else{
+                Log.d("BleClient","No Scanner")
+            }
+        }
+    }
+
+
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    fun connect(device: BluetoothDevice) {
+        bluetoothGatt = device.connectGatt(context, false, gattCallback)
+    }
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    override fun disconnect(){
+        bluetoothGatt?.close()
+        callback.connectionClosed()
+    }
+
+
+    public inner class MyBluetoothScannerCallback: ScanCallback(){
+        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+        override fun onBatchScanResults(results : List<ScanResult> )
+        {
+            val i = results.size
+            Log.d("ScanCallback","onBatchScanResults: $i devices")
+
+            connect(results[0].device)
+        }
+
+        override fun onScanFailed(errorCode : Int)
+        {
+            Log.d("ScanCallback","onScanFailed: $errorCode")
+        }
+
+        override fun onScanResult(callbackType : Int,result : ScanResult )
+        {
+            Log.d("ScanCallback","onScanResult: $callbackType")
+        }
+    }
     /*@RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     fun sendMessage(message: String) {
         val value = message.toByteArray()
@@ -105,12 +202,16 @@ class BleClient(private val context: Context, rF:(ByteArray)->Unit,cF : ()->Unit
     }*/
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    fun sendMessage(data: ByteArray) {
+    override fun sendMessage(data: ByteArray) {
         if(sendMessageBuffer!=null){
             Log.d("BLE_SERVER","Still busy with sending")
         }
         sendMessageBuffer = data
         startSend()
+    }
+
+    override fun isInitiator(): Boolean {
+        return false
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
