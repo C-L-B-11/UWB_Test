@@ -31,6 +31,12 @@ import android.widget.TextView
 import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.core.i18n.DateTimeFormatter
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import java.io.File
+import java.sql.Time
+
 import java.util.UUID
 import java.util.concurrent.Executor
 import kotlin.experimental.and
@@ -46,10 +52,10 @@ class MainActivity  : AppCompatActivity() {
 
     private var exception: TextView? = null
 
-    private var tvSendText: EditText? = null
     private var tvRangeDisplay: TextView? = null
     @SuppressLint("UseSwitchCompatOrMaterialCode")
     private var swIsController: Switch? = null
+    private var swMakeLog: Switch? = null
     private var connectButton: Button? = null
     private var disconnectButton: Button? = null
 
@@ -65,6 +71,7 @@ class MainActivity  : AppCompatActivity() {
 
     private var rangingSession : RangingSession? = null
 
+    private var logEntries :  ArrayList<String>? = null
 
 
 
@@ -87,9 +94,10 @@ class MainActivity  : AppCompatActivity() {
 
     private fun initUI() {
 
-        tvSendText = findViewById<EditText>(R.id.etSendText)
+
         tvRangeDisplay = findViewById<TextView>(R.id.rangeDisplay)
         swIsController = findViewById<Switch>(R.id.swIsController)
+        swMakeLog = findViewById<Switch>(R.id.swMakeLog)
         exception = findViewById<TextView>(R.id.exception)
         connectButton = findViewById<Button>(R.id.ConButton)
         connectButton!!.setOnClickListener  { _ -> connect() }
@@ -111,10 +119,21 @@ class MainActivity  : AppCompatActivity() {
             rangingSession?.stop()
         }
         else{
-            stopMeasuringButton?.isEnabled = false
-            startMeasuringButton?.isEnabled = true
-            disconnectButton?.isEnabled = true
 
+            if(swMakeLog?.isChecked == true && logEntries!=null)
+            {
+                //TODO
+                val file = File(baseContext.filesDir, "log.txt")
+                for(s in logEntries!!){
+                    file.appendText(s)
+                }
+            }
+            runOnUiThread {
+                stopMeasuringButton?.isEnabled = false
+                startMeasuringButton?.isEnabled = true
+                disconnectButton?.isEnabled = true
+                swMakeLog?.isEnabled = true
+            }
         }
 
     }
@@ -124,6 +143,7 @@ class MainActivity  : AppCompatActivity() {
         stopMeasuringButton?.isEnabled = true
         disconnectButton?.isEnabled = false
 
+        swMakeLog?.isEnabled = false
         if (ActivityCompat.checkSelfPermission(
                 this,
                 Manifest.permission.BLUETOOTH_CONNECT
@@ -143,12 +163,15 @@ class MainActivity  : AppCompatActivity() {
 
         val deviceHandle: DeviceHandle = DeviceHandle.Builder(rangingDevice,transportHandle!!)
             .build()
-        //val filter: Set<Int> = setOf(RangingManager.BLE_CS,RangingManager.BLE_RSSI)
+        val filter: Set<Int> = setOf(RangingManager.BLE_CS,RangingManager.WIFI_NAN_RTT)
         if(swIsController?.isChecked == true) {
             role= RangingPreference.DEVICE_ROLE_INITIATOR
 
-            //config = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).setRangingTechnologyFilter(filter).build()
-            config = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).build()
+            config = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).setRangingTechnologyFilter(filter).build()
+            //config = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).build()
+            if(swMakeLog?.isChecked == true){
+                logEntries = ArrayList<String>()
+            }
         }
         else
         {
@@ -172,6 +195,13 @@ class MainActivity  : AppCompatActivity() {
 
         if(oobConnector!=null ) {
             oobConnector?.disconnect()
+        }
+    }
+    private fun disconnected(){
+        runOnUiThread {
+            connectButton?.isEnabled = true
+            disconnectButton?.isEnabled = false
+            startMeasuringButton?.isEnabled = false
         }
     }
 
@@ -224,9 +254,7 @@ class MainActivity  : AppCompatActivity() {
         override fun connectionClosed() {
             Log.d("TransportHandle","connection closed")
             oobConnector = null
-            connectButton?.isEnabled=true
-            disconnectButton?.isEnabled=false
-            startMeasuringButton?.isEnabled = false
+            disconnected()
         }
 
         override fun messageRecieved(data: ByteArray) {
@@ -242,24 +270,16 @@ class MainActivity  : AppCompatActivity() {
         override fun onClosed(p0: Int) {
             Log.d("RangingResult","onClosed: $p0")
             rangingSession = null
-            runOnUiThread{
-                stopMeasuringButton?.isEnabled = false
-                startMeasuringButton?.isEnabled = true
-                disconnectButton?.isEnabled = true
-
-            }
+            stopMeasuring()
 
         }
 
         override fun onOpenFailed(p0: Int) {
             Log.d("RangingResult","onOpenFailed: $p0")
             rangingSession = null
-            runOnUiThread{
-                stopMeasuringButton?.isEnabled = false
-                startMeasuringButton?.isEnabled = true
-                disconnectButton?.isEnabled = true
+            stopMeasuring()
 
-            }
+
 
         }
 
@@ -273,6 +293,13 @@ class MainActivity  : AppCompatActivity() {
             runOnUiThread {
                 val message = p1.distance?.measurement
                 tvRangeDisplay?.text = String.format("%.3f", message)
+            }
+            if(swMakeLog?.isChecked==true && logEntries!=null){
+                var s = ""
+                val now = LocalDate.now()
+                s += "[${now.format( LocalDateTime.Formats.ISO)}]:"
+                s+= "${p1.distance?.measurement}\n"
+                logEntries?.add(s)
             }
         }
 

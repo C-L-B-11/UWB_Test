@@ -16,8 +16,6 @@
             android:id="@+id/bar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-
-
             android:theme="@style/Theme.UWB_Test.AppBarOverlay"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent">
@@ -29,61 +27,53 @@
                 android:background="?attr/colorPrimary"
                 app:popupTheme="@style/Theme.UWB_Test.PopupOverlay"
                 app:title="UWB_Test" />
-
         </com.google.android.material.appbar.AppBarLayout>
 
-        <TableLayout
-            android:id="@+id/tableLayout"
-            android:layout_width="match_parent"
+
+        <TextView
+            android:id="@+id/tvIsController"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="10dp"
             android:layout_marginTop="10dp"
-            android:layout_marginEnd="10dp"
-            app:layout_constraintEnd_toEndOf="parent"
+            android:text="IsController"
+            android:textSize="10pt"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/bar">
-
-            <TableRow
-                android:layout_width="match_parent"
-                android:layout_height="match_parent">
-
-                <TextView
-                    android:id="@+id/tvSendText"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="SendText"
-                    android:textSize="10pt" />
-
-                <EditText
-                    android:id="@+id/etSendText"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text=""
-                    android:textSize="10pt" />
-            </TableRow>
+            app:layout_constraintTop_toBottomOf="@+id/bar" />
 
 
-            <TableRow
-                android:layout_width="match_parent"
-                android:layout_height="match_parent">
-
-                <TextView
-                    android:id="@+id/tvIsController"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="IsController"
-                    android:textSize="10pt" />
-
-                <Switch
-                    android:id="@+id/swIsController"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="left"
-                    android:text="" />
+        <Switch
+            android:id="@+id/swIsController"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            app:layout_constraintBottom_toBottomOf="@+id/tvIsController"
+            app:layout_constraintStart_toEndOf="@+id/tvIsController"
+            app:layout_constraintTop_toTopOf="@+id/tvIsController" />
 
 
-            </TableRow>
-        </TableLayout>
+        <TextView
+            android:id="@+id/tvMakeLog"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_marginTop="10dp"
+            android:text="Make Log"
+            android:textSize="10pt"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/tvIsController" />
+
+
+        <Switch
+            android:id="@+id/swMakeLog"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            app:layout_constraintBottom_toBottomOf="@+id/tvMakeLog"
+            app:layout_constraintStart_toEndOf="@+id/tvMakeLog"
+            app:layout_constraintTop_toTopOf="@+id/tvMakeLog" />
+
+
 
         <Button
             android:id="@+id/ConButton"
@@ -95,7 +85,7 @@
             android:text="Connect"
             app:layout_constraintEnd_toStartOf="@+id/DConButton"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/tableLayout" />
+            app:layout_constraintTop_toBottomOf="@+id/tvMakeLog" />
 
         <Button
             android:id="@+id/DConButton"

@@ -141,6 +141,7 @@ class BleClient(private val context: Context,private val callback: MainActivity.
                 Log.d("BleClient","Start Scanning")
                 sc.startScan(myScanCallback)
 
+
                 val list: List<BluetoothDevice> = bluetoothManager.adapter.bondedDevices.toList()
                 val i =list.size
                 //exception?.text = "found $i devices"
