@@ -138,7 +138,7 @@ class BleClient(private val context: Context,private val callback: MainActivity.
             val sc = bluetoothManager.adapter.bluetoothLeScanner
             if(sc!=null){
                 val myScanCallback = MyBluetoothScannerCallback()
-                    Log.d("BleClient","Start Scanning")
+                Log.d("BleClient","Start Scanning")
                 sc.startScan(myScanCallback)
 
                 val list: List<BluetoothDevice> = bluetoothManager.adapter.bondedDevices.toList()

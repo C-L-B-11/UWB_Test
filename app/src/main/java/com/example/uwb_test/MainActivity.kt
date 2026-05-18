@@ -132,21 +132,6 @@ class MainActivity  : AppCompatActivity() {
             return
         }
 
-        /*val message = tvSendText?.text.toString()
-
-        if(swIsController?.isChecked==false){
-            if(gattServer!=null){
-
-                gattServer?.sendMessage(message)
-            }
-        }
-        else
-        {
-            if(gattClient !=null){
-                gattClient?.sendMessage(message)
-            }
-        }*/
-
 
         val myRangingSessionCallback = MyRangingSessionCallback()
         val myExecutor = MyExecutor()
@@ -158,29 +143,20 @@ class MainActivity  : AppCompatActivity() {
 
         val deviceHandle: DeviceHandle = DeviceHandle.Builder(rangingDevice,transportHandle!!)
             .build()
-
-
-
+        //val filter: Set<Int> = setOf(RangingManager.BLE_CS,RangingManager.BLE_RSSI)
         if(swIsController?.isChecked == true) {
             role= RangingPreference.DEVICE_ROLE_INITIATOR
-            val filter: Set<Int> = setOf(RangingManager.BLE_CS,RangingManager.WIFI_NAN_RTT)
-            config = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).setRangingTechnologyFilter(filter).build()
 
+            //config = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).setRangingTechnologyFilter(filter).build()
+            config = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).build()
         }
         else
         {
             role = RangingPreference.DEVICE_ROLE_RESPONDER
             config = (OobResponderRangingConfig.Builder( deviceHandle).build())
-
         }
-
         val rangingPreference: RangingPreference =  RangingPreference.Builder(role, config).build()
-
-        //val myRangingPreference = RangingPreference.Builder();
         rangingSession?.start(rangingPreference)
-
-
-
     }
 
 
@@ -199,8 +175,8 @@ class MainActivity  : AppCompatActivity() {
         }
     }
 
-    @SuppressLint("SetTextI18n")
-    @RequiresPermission(Manifest.permission.RANGING)
+
+
     private fun connect() {
 
         if(swIsController?.isChecked==false){
