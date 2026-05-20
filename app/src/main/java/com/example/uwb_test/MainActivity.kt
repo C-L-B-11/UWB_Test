@@ -3,13 +3,7 @@ package com.example.uwb_test
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothManager
-import android.bluetooth.le.AdvertiseCallback
-import android.bluetooth.le.AdvertiseData
-import android.bluetooth.le.AdvertiseSettings
-import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanResult
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.ranging.RangingConfig
@@ -25,21 +19,28 @@ import android.ranging.oob.TransportHandle
 import android.util.Log
 import android.view.WindowManager
 import android.widget.Button
-import android.widget.EditText
 import android.widget.Switch
 import android.widget.TextView
-import androidx.annotation.RequiresPermission
+import android.widget.Toast
+import androidx.activity.result.ActivityResultCallback
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-import androidx.core.i18n.DateTimeFormatter
 import kotlinx.datetime.LocalDate
-import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.UtcOffset
+import kotlinx.datetime.format
+import kotlinx.datetime.format.DateTimeComponents
+import kotlinx.datetime.format.char
 import java.io.File
-import java.sql.Time
+import java.io.OutputStream
+import java.nio.charset.StandardCharsets
 
 import java.util.UUID
 import java.util.concurrent.Executor
 import kotlin.experimental.and
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 val SERVICE_UUID: UUID = UUID.fromString("0000180D-0000-1000-8000-00805f9b34fb")
 val CHAR_UUID: UUID = UUID.fromString("00002A37-0000-1000-8000-00805f9b34fb")
@@ -48,7 +49,7 @@ const val SNIPPET_RECIEVED:Byte = 0
 const val SNIPPET_LAST:Byte = 1
 const val SNIPPET_INTERMEDIATE:Byte  = 2
 
-class MainActivity  : AppCompatActivity() {
+open class MainActivity  : AppCompatActivity() {
 
     private var exception: TextView? = null
 
@@ -74,9 +75,6 @@ class MainActivity  : AppCompatActivity() {
     private var logEntries :  ArrayList<String>? = null
 
 
-
-
-
     //private val scope = CoroutineScope(Dispatchers.IO)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -90,11 +88,7 @@ class MainActivity  : AppCompatActivity() {
     }
 
 
-
-
     private fun initUI() {
-
-
         tvRangeDisplay = findViewById<TextView>(R.id.rangeDisplay)
         swIsController = findViewById<Switch>(R.id.swIsController)
         swMakeLog = findViewById<Switch>(R.id.swMakeLog)
@@ -122,11 +116,7 @@ class MainActivity  : AppCompatActivity() {
 
             if(swMakeLog?.isChecked == true && logEntries!=null)
             {
-                //TODO
-                val file = File(baseContext.filesDir, "log.txt")
-                for(s in logEntries!!){
-                    file.appendText(s)
-                }
+                safeLog()
             }
             runOnUiThread {
                 stopMeasuringButton?.isEnabled = false
@@ -219,6 +209,62 @@ class MainActivity  : AppCompatActivity() {
         disconnectButton?.isEnabled=true
     }
 
+    @OptIn(ExperimentalTime::class)
+    public fun logEntry(msg:String){
+        if(logEntries==null)
+            return
+
+        val time = Clock.System.now()
+        val format = DateTimeComponents.Format {
+            date(LocalDate.Formats.ISO)
+            char('T')
+            hour(); char(':'); minute(); char(':'); second()
+            char('.'); secondFraction(3)
+            offset(UtcOffset.Formats.ISO)
+        }
+        var s = "[${time.format(format)}]:"
+        s+= msg
+        s+= "\n"
+        logEntries?.add(s)
+
+    }
+
+    public fun safeLog(){
+
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/json");
+        intent.putExtra(Intent.EXTRA_TITLE, "log.txt");
+        startActivityForResult(intent, 1);
+
+        //TODO
+        val contract = CreateDocument("log.txt")
+        val activityCallback = object : ActivityResultCallback(Any?){
+
+            override fun onActivityResult(result: Any?) {
+
+            }
+
+        }
+        registerForActivityResult(contract,)
+    }
+
+    @Override
+    protected fun onActivityResult(requestCode:Int,resultCode:Int, data:Intent) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == 1 && resultCode == RESULT_OK) {
+            try {
+                var fileText = ""
+                for(s in logEntries!!){
+                    fileText += s
+                }
+                val os = contentResolver.openOutputStream(data.data!!)
+                os?.write(fileText.toByteArray());
+                os?.close()
+                Toast.makeText(this, "Datei gespeichert!", Toast.LENGTH_SHORT).show();
+            } catch (e: Exception) {Log.d("FileSave",e.message!!) }
+        }
+    }
 
     public inner class MyTransportHandle(): TransportHandle,OobConnectionCallback {
         var callbackExecuter : Executor? = null
@@ -271,16 +317,12 @@ class MainActivity  : AppCompatActivity() {
             Log.d("RangingResult","onClosed: $p0")
             rangingSession = null
             stopMeasuring()
-
         }
 
         override fun onOpenFailed(p0: Int) {
             Log.d("RangingResult","onOpenFailed: $p0")
             rangingSession = null
             stopMeasuring()
-
-
-
         }
 
         override fun onOpened() {
@@ -288,18 +330,13 @@ class MainActivity  : AppCompatActivity() {
         }
 
         override fun onResults(p0: RangingDevice, p1: RangingData) {
-
             Log.d("RangingResult","onResults: $p1")
             runOnUiThread {
                 val message = p1.distance?.measurement
                 tvRangeDisplay?.text = String.format("%.3f", message)
             }
-            if(swMakeLog?.isChecked==true && logEntries!=null){
-                var s = ""
-                val now = LocalDate.now()
-                s += "[${now.format( LocalDateTime.Formats.ISO)}]:"
-                s+= "${p1.distance?.measurement}\n"
-                logEntries?.add(s)
+            if(swMakeLog?.isChecked==true ){
+                logEntry(p1.distance?.measurement.toString())
             }
         }
 
