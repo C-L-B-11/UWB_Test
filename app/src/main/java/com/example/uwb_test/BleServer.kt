@@ -19,7 +19,6 @@ import android.content.pm.PackageManager
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
-import kotlin.jvm.Throws
 
 
 class BleServer(private val context : Context,private val callback : MainActivity.OobConnectionCallback): MainActivity.OobConnection {
@@ -69,39 +68,41 @@ class BleServer(private val context : Context,private val callback : MainActivit
             Log.d("BLE_SERVER", "recvFragment: ${MainActivity.byteToHexString(value)}")
 
             val mode:Byte = value[0]
-            if(mode==SNIPPET_RECIEVED){
-                if (responseNeeded) {
-                    gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
-                }
-                startSend()
-                return
-            }
             var data = value.copyOfRange(1,value.size)
+            if (responseNeeded) {
+                gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
+            }
+            when(mode){
+                SNIPPET_RECIEVED -> startSend()
+                START_MEASUREMENT -> callback.startMeasuringOrder()
+                REQUEST_MEASUREMENT -> callback.requestMeasuring()
+                STOP_MEASUREMENT -> callback.stopMeasuring()
+                SNIPPET_LAST -> commsMessage(mode,data)
+                SNIPPET_INTERMEDIATE -> commsMessage(mode,data)
+                SHARED_RESULT -> callback.sharedResult(MainActivity.byteArrayToDouble(data))
+            }
 
+
+
+        }
+
+        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+        fun commsMessage(mode:Byte,data:ByteArray){
             if(recvMessageBuffer==null){
                 recvMessageBuffer = ByteArray(0)
             }
             recvMessageBuffer = recvMessageBuffer!! + data
 
             if(mode==SNIPPET_LAST){
-                data = recvMessageBuffer!!
+                callback.messageReceived(recvMessageBuffer!!)
                 recvMessageBuffer=null
-                callback.messageRecieved(data)
             }
 
-            if (responseNeeded) {
-                gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
-            }
 
             if(mode==SNIPPET_INTERMEDIATE){
                 sendCodedMessage(SNIPPET_RECIEVED,ByteArray(0))
-                    return
+                return
             }
-
-
-
-
-
         }
 
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
@@ -177,7 +178,25 @@ class BleServer(private val context : Context,private val callback : MainActivit
         }
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    override fun startMeasuring() {
+        sendCodedMessage(START_MEASUREMENT,ByteArray(0))
+    }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    override fun requestMeasuring() {
+        sendCodedMessage(REQUEST_MEASUREMENT,ByteArray(0))
+    }
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    override fun sharedResult(distance: Double) {
+        sendCodedMessage(SHARED_RESULT,MainActivity.doubleToByteArray(distance))
+    }
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    override fun stopMeasuring() {
+        sendCodedMessage(STOP_MEASUREMENT,ByteArray(0))
+    }
 
     /*@RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     fun sendMessage( message: String) {

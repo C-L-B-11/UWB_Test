@@ -3,8 +3,11 @@ package com.example.uwb_test
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.ranging.RangingConfig
 import android.ranging.RangingData
@@ -22,19 +25,15 @@ import android.widget.Button
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.result.ActivityResultCallback
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
+import androidx.activity.result.contract.ActivityResultContract
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import kotlinx.datetime.LocalDate
-import kotlinx.datetime.UtcOffset
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
 import kotlinx.datetime.format
-import kotlinx.datetime.format.DateTimeComponents
 import kotlinx.datetime.format.char
-import java.io.File
-import java.io.OutputStream
-import java.nio.charset.StandardCharsets
+import kotlinx.datetime.toLocalDateTime
 
 import java.util.UUID
 import java.util.concurrent.Executor
@@ -49,13 +48,20 @@ const val SNIPPET_RECIEVED:Byte = 0
 const val SNIPPET_LAST:Byte = 1
 const val SNIPPET_INTERMEDIATE:Byte  = 2
 
+const val START_MEASUREMENT:Byte = 10
+const val REQUEST_MEASUREMENT:Byte = 11
+const val STOP_MEASUREMENT:Byte = 12
+const val SHARED_RESULT:Byte = 13
+
 open class MainActivity  : AppCompatActivity() {
 
     private var exception: TextView? = null
 
     private var tvRangeDisplay: TextView? = null
+
     @SuppressLint("UseSwitchCompatOrMaterialCode")
     private var swIsController: Switch? = null
+    @SuppressLint("UseSwitchCompatOrMaterialCode")
     private var swMakeLog: Switch? = null
     private var connectButton: Button? = null
     private var disconnectButton: Button? = null
@@ -73,6 +79,11 @@ open class MainActivity  : AppCompatActivity() {
     private var rangingSession : RangingSession? = null
 
     private var logEntries :  ArrayList<String>? = null
+
+    private val saveLauncher = registerForActivityResult(SaveFileContract()) { uri: Uri? ->
+        if (uri != null) writeContentToUri(uri)
+        else             onFileSaveCancelled()
+    }
 
 
     //private val scope = CoroutineScope(Dispatchers.IO)
@@ -98,42 +109,56 @@ open class MainActivity  : AppCompatActivity() {
         disconnectButton = findViewById<Button>(R.id.DConButton)
         disconnectButton!!.setOnClickListener  { _ -> disconnect() }
         startMeasuringButton = findViewById<Button>(R.id.StartMsgBtn)
-        startMeasuringButton!!.setOnClickListener  { _ -> startMeasuring() }
+        startMeasuringButton!!.setOnClickListener  { _ -> startMeasuringBtn() }
         stopMeasuringButton = findViewById<Button>(R.id.StopMsgBtn)
-        stopMeasuringButton!!.setOnClickListener  { _ -> stopMeasuring() }
+        stopMeasuringButton!!.setOnClickListener  { _ -> stopMeasuringBtn() }
 
 
         transportHandle = MyTransportHandle()
 
     }
 
+    private fun stopMeasuringBtn()
+    {
+        oobConnector?.stopMeasuring()
+        stopMeasuring()
+    }
     private fun stopMeasuring(){
 
         if(rangingSession!=null){
             rangingSession?.stop()
         }
         else{
-
-            if(swMakeLog?.isChecked == true && logEntries!=null)
-            {
-                safeLog()
-            }
             runOnUiThread {
                 stopMeasuringButton?.isEnabled = false
                 startMeasuringButton?.isEnabled = true
                 disconnectButton?.isEnabled = true
                 swMakeLog?.isEnabled = true
             }
+            if(swMakeLog?.isChecked == true && logEntries!=null)
+            {
+                safeLog()
+            }
         }
 
     }
+
+    private fun startMeasuringBtn(){
+        if(swIsController?.isChecked==true){
+            oobConnector?.requestMeasuring()
+        }
+        else{
+            startMeasuring()
+        }
+    }
     @SuppressLint("NewApi")
     private fun startMeasuring(){
-        startMeasuringButton?.isEnabled = false
-        stopMeasuringButton?.isEnabled = true
-        disconnectButton?.isEnabled = false
-
-        swMakeLog?.isEnabled = false
+        runOnUiThread {
+            startMeasuringButton?.isEnabled = false
+            stopMeasuringButton?.isEnabled = true
+            disconnectButton?.isEnabled = false
+            swMakeLog?.isEnabled = false
+        }
         if (ActivityCompat.checkSelfPermission(
                 this,
                 Manifest.permission.BLUETOOTH_CONNECT
@@ -153,15 +178,13 @@ open class MainActivity  : AppCompatActivity() {
 
         val deviceHandle: DeviceHandle = DeviceHandle.Builder(rangingDevice,transportHandle!!)
             .build()
-        val filter: Set<Int> = setOf(RangingManager.BLE_CS,RangingManager.WIFI_NAN_RTT)
+        val filter: Set<Int> = setOf(RangingManager.BLE_CS,RangingManager.WIFI_NAN_RTT,RangingManager.UWB)
         if(swIsController?.isChecked == true) {
             role= RangingPreference.DEVICE_ROLE_INITIATOR
 
             config = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).setRangingTechnologyFilter(filter).build()
             //config = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).build()
-            if(swMakeLog?.isChecked == true){
-                logEntries = ArrayList<String>()
-            }
+
         }
         else
         {
@@ -170,6 +193,12 @@ open class MainActivity  : AppCompatActivity() {
         }
         val rangingPreference: RangingPreference =  RangingPreference.Builder(role, config).build()
         rangingSession?.start(rangingPreference)
+
+        if(swIsController?.isChecked == false)
+            oobConnector?.startMeasuring()
+        if(swMakeLog?.isChecked == true){
+            logEntries = ArrayList<String>()
+        }
     }
 
 
@@ -195,8 +224,6 @@ open class MainActivity  : AppCompatActivity() {
         }
     }
 
-
-
     private fun connect() {
 
         if(swIsController?.isChecked==false){
@@ -213,58 +240,37 @@ open class MainActivity  : AppCompatActivity() {
     public fun logEntry(msg:String){
         if(logEntries==null)
             return
-
-        val time = Clock.System.now()
-        val format = DateTimeComponents.Format {
-            date(LocalDate.Formats.ISO)
-            char('T')
-            hour(); char(':'); minute(); char(':'); second()
-            char('.'); secondFraction(3)
-            offset(UtcOffset.Formats.ISO)
-        }
-        var s = "[${time.format(format)}]:"
+        var s = "[${dateTimeString()}]:"
         s+= msg
         s+= "\n"
         logEntries?.add(s)
-
     }
 
     public fun safeLog(){
+        if(logEntries==null || logEntries?.size==0) {
+            onFileSaveCancelled()
+            return
+        }
+        saveLauncher.launch(
+            SaveFileInput(
+                suggestedFileName = "rangingLog${dateTimeString()}.txt",
+                mimeType          = androidx.media3.common.MimeTypes.TEXT_VTT
+            )
+        )
+    }
 
-        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("application/json");
-        intent.putExtra(Intent.EXTRA_TITLE, "log.txt");
-        startActivityForResult(intent, 1);
-
-        //TODO
-        val contract = CreateDocument("log.txt")
-        val activityCallback = object : ActivityResultCallback(Any?){
-
-            override fun onActivityResult(result: Any?) {
-
+    public fun gotResult(data:Double){
+        runOnUiThread {
+            tvRangeDisplay?.text = buildString {
+                append(String.format("%.3f", data))
+                append("m")
             }
-
         }
-        registerForActivityResult(contract,)
-    }
-
-    @Override
-    protected fun onActivityResult(requestCode:Int,resultCode:Int, data:Intent) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == 1 && resultCode == RESULT_OK) {
-            try {
-                var fileText = ""
-                for(s in logEntries!!){
-                    fileText += s
-                }
-                val os = contentResolver.openOutputStream(data.data!!)
-                os?.write(fileText.toByteArray());
-                os?.close()
-                Toast.makeText(this, "Datei gespeichert!", Toast.LENGTH_SHORT).show();
-            } catch (e: Exception) {Log.d("FileSave",e.message!!) }
+        if(swMakeLog?.isChecked==true ){
+            logEntry(data.toString())
         }
     }
+
 
     public inner class MyTransportHandle(): TransportHandle,OobConnectionCallback {
         var callbackExecuter : Executor? = null
@@ -303,13 +309,29 @@ open class MainActivity  : AppCompatActivity() {
             disconnected()
         }
 
-        override fun messageRecieved(data: ByteArray) {
+        override fun messageReceived(data: ByteArray) {
             val s = byteToHexString(data)
             Log.d("TransportHandle","message Recieved $s")
             if(callbackExecuter!= null)
                 callbackExecuter?.run {callbackFunction?.onReceiveData(data)  }
         }
 
+        override fun startMeasuringOrder() {
+            startMeasuring()
+        }
+
+        override fun requestMeasuring() {
+            startMeasuringBtn()
+        }
+
+        override fun stopMeasuring() {
+            if(rangingSession!=null)
+                rangingSession?.close()
+        }
+
+        override fun sharedResult(distance: Double) {
+            gotResult(distance)
+        }
     }
 
     public inner class MyRangingSessionCallback: RangingSession.Callback{
@@ -331,12 +353,10 @@ open class MainActivity  : AppCompatActivity() {
 
         override fun onResults(p0: RangingDevice, p1: RangingData) {
             Log.d("RangingResult","onResults: $p1")
-            runOnUiThread {
-                val message = p1.distance?.measurement
-                tvRangeDisplay?.text = String.format("%.3f", message)
-            }
-            if(swMakeLog?.isChecked==true ){
-                logEntry(p1.distance?.measurement.toString())
+            val distance = p1.distance?.measurement
+            if(distance!=null) {
+                gotResult(distance)
+                oobConnector?.sharedResult(distance)
             }
         }
 
@@ -361,115 +381,122 @@ open class MainActivity  : AppCompatActivity() {
         abstract fun sendMessage(data: ByteArray)
         abstract fun isInitiator():Boolean
         abstract fun disconnect()
+        abstract fun startMeasuring()
+        abstract fun requestMeasuring()
+        abstract fun stopMeasuring()
+        abstract fun sharedResult(distance: Double)
 
     }
 
     public interface OobConnectionCallback{
         abstract fun connectionEstablished()
         abstract fun connectionClosed()
-        abstract fun messageRecieved(data:ByteArray)
+        abstract fun messageReceived(data:ByteArray)
+        abstract fun startMeasuringOrder()
+        abstract fun requestMeasuring()
+        abstract fun stopMeasuring()
+        abstract fun sharedResult(distance: Double)
+    }
+
+    @OptIn(ExperimentalTime::class)
+    public fun dateTimeString():String{
+        val time = Clock.System.now()
+        val localTime = time.toLocalDateTime(TimeZone.currentSystemDefault())
+        val format = LocalDateTime.Format {
+            date(LocalDate.Formats.ISO)
+            char(';')
+            hour(); char(':'); minute(); char(':'); second()
+            char('.'); secondFraction(3)
+        }
+        return localTime.format(format)
+    }
+
+    data class SaveFileInput(
+        val suggestedFileName: String,
+        val mimeType: String = "*/*"
+    )
+
+    class SaveFileContract : ActivityResultContract<SaveFileInput, Uri?>() {
+
+        override fun createIntent(context: Context, input: SaveFileInput): Intent =
+            Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = input.mimeType
+                putExtra(Intent.EXTRA_TITLE, input.suggestedFileName)
+            }
+
+        override fun parseResult(resultCode: Int, intent: Intent?): Uri? =
+            if (resultCode == Activity.RESULT_OK) intent?.data else null
     }
 
 
-    /*
-    private fun ParseStringToInt(s: String):Int{
-        var x = 0
-        for(c in s.toCharArray())
-        {
-            if(!c.isDigit())
-                return 0
-            x*=10
-            x+= c.minus('0')
-        }
-        return x
+    fun onFileSaveCancelled() {
+        Toast.makeText(this, "Save cancelled.", Toast.LENGTH_SHORT).show()
     }
-
-    private fun ParseStringToByteArry(s: String):ByteArray{
-        var x : ByteArray = ByteArray(16)
-
-        if(s.length!=32)
-            return x
-
-        x= ByteArray(s.length/2){0}
-
-        var i:Int=0
-        var byte: Byte = 0
-        while(i <s.length)
-        {
-
-            if(HexVal(s[i]) == (-1).toByte()||HexVal(s[i+1]) == (-1).toByte())
-                byte=0
-            else
-                byte = ((HexVal(s[i]).toInt().shl(4).toByte()) + HexVal(s[i+1])).toByte()
-            x[i]=byte
-            i+=2
+    private fun writeContentToUri(uri: Uri) {
+        try {
+            contentResolver.openOutputStream(uri)?.use { outputStream ->
+                // Replace this with whatever bytes / text you want to save:
+                var fileText = ""
+                for(s in logEntries!!){
+                    fileText += s
+                }
+                outputStream.write(fileText.toByteArray())
+            }
+            Toast.makeText(this, "File saved!", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error saving: ${e.message}", Toast.LENGTH_LONG).show()
         }
-        return x
+        logEntries = null
     }
-    private fun HexVal(c:Char): Byte{
-        var x:Byte = 0
-        when(c){
-            '0' -> x=0
-            '1' -> x=1
-            '2' -> x=2
-            '3' -> x=3
-            '4' -> x=4
-            '5' -> x=5
-            '6' -> x=6
-            '7' -> x=7
-            '8' -> x=8
-            '9' -> x=9
-            'A' -> x=10
-            'B' -> x=11
-            'C' -> x=12
-            'D' -> x=13
-            'E' -> x=14
-            'F' -> x=15
-            'a' -> x=10
-            'b' -> x=11
-            'c' -> x=12
-            'd' -> x=13
-            'e' -> x=14
-            'f' -> x=15
-            else -> x=-1
-        }
-        return x
-    }*/
 
     companion object {
-    public fun byteToHexString(data:ByteArray):String{
-        var s = ""
-        for(b in data)
-        {
-            s+= Bit4ToHex((b.toInt() shr 4).toByte())
-            s+= Bit4ToHex(b)
-            s+=';'
+        fun byteToHexString(data:ByteArray):String{
+            var s = ""
+            for(b in data)
+            {
+                s+= Bit4ToHex((b.toInt() shr 4).toByte())
+                s+= Bit4ToHex(b)
+                s+=';'
+            }
+            return s
         }
-        return s
-    }
-    public fun Bit4ToHex(data:Byte):Char{
-        val data2 :Int = (data and 0xF).toInt()
-        when(data2){
-            0 -> return '0'
-            1 -> return '1'
-            2 -> return '2'
-            3 -> return '3'
-            4 -> return '4'
-            5 -> return '5'
-            6 -> return '6'
-            7 -> return '7'
-            8 -> return '8'
-            9 -> return '9'
-            10 -> return 'A'
-            11 -> return 'B'
-            12 -> return 'C'
-            13 -> return 'D'
-            14 -> return 'E'
-            15 -> return 'F'
-            else -> return 'X'
+        fun Bit4ToHex(data:Byte):Char{
+            val data2 :Int = (data and 0xF).toInt()
+            when(data2){
+                0 -> return '0'
+                1 -> return '1'
+                2 -> return '2'
+                3 -> return '3'
+                4 -> return '4'
+                5 -> return '5'
+                6 -> return '6'
+                7 -> return '7'
+                8 -> return '8'
+                9 -> return '9'
+                10 -> return 'A'
+                11 -> return 'B'
+                12 -> return 'C'
+                13 -> return 'D'
+                14 -> return 'E'
+                15 -> return 'F'
+                else -> return 'X'
+            }
+        }
+        fun doubleToByteArray(value: Double): ByteArray {
+            val bits = java.lang.Double.doubleToLongBits(value)
+            return ByteArray(8) { i -> (bits shr (56 - i * 8)).toByte() }
+        }
+        fun byteArrayToDouble(bytes: ByteArray): Double {
+            require(bytes.size == 8)
+            val bits = bytes.foldIndexed(0L) { i, acc, b ->
+                acc or ((b.toLong() and 0xFF) shl (56 - i * 8))
+            }
+            return java.lang.Double.longBitsToDouble(bits)
         }
     }
-    }
+
+
 }
 
 

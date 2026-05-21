@@ -9,12 +9,15 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
+import java.util.Collections
 
 
 class BleClient(private val context: Context,private val callback: MainActivity.OobConnectionCallback):MainActivity.OobConnection {
@@ -22,8 +25,6 @@ class BleClient(private val context: Context,private val callback: MainActivity.
     private val bluetoothManager =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private var bluetoothGatt: BluetoothGatt? = null
-
-
 
     private var sendMessageBuffer : ByteArray? = null
     private var recvMessageBuffer : ByteArray? = null
@@ -75,29 +76,19 @@ class BleClient(private val context: Context,private val callback: MainActivity.
             Log.d("BLE_CLIENT", "recvFragment:${MainActivity.byteToHexString(value)}")
 
             val mode:Byte = value[0]
-            if(mode==SNIPPET_RECIEVED){
-                startSend()
-                return
-            }
             var data = value.copyOfRange(1,value.size)
-
-            if(recvMessageBuffer==null){
-                recvMessageBuffer = ByteArray(0)
-            }
-            recvMessageBuffer = recvMessageBuffer!! + data
-
-            if(mode==SNIPPET_LAST){
-                data = recvMessageBuffer!!
-                recvMessageBuffer=null
-                callback.messageRecieved(data)
-            }
-
-            if(mode==SNIPPET_INTERMEDIATE){
-                sendCodedMessage(SNIPPET_RECIEVED,ByteArray(0))
-                return
+            when(mode){
+                SNIPPET_RECIEVED -> startSend()
+                START_MEASUREMENT -> callback.startMeasuringOrder()
+                REQUEST_MEASUREMENT -> callback.requestMeasuring()
+                STOP_MEASUREMENT -> callback.stopMeasuring()
+                SNIPPET_LAST -> commsMessage(mode,data)
+                SNIPPET_INTERMEDIATE -> commsMessage(mode,data)
+                SHARED_RESULT -> callback.sharedResult(MainActivity.byteArrayToDouble(data))
             }
         }
     }
+
     init{
         var flag=true
         if (
@@ -139,7 +130,16 @@ class BleClient(private val context: Context,private val callback: MainActivity.
             if(sc!=null){
                 val myScanCallback = MyBluetoothScannerCallback()
                 Log.d("BleClient","Start Scanning")
-                sc.startScan(myScanCallback)
+
+
+                val scanSettings = ScanSettings.Builder()
+                    .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                    .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+                    .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+                    .build()
+
+                val scanFilter = ScanFilter.Builder().build()
+                sc.startScan(Collections.singletonList(scanFilter), scanSettings,myScanCallback)
 
 
                 val list: List<BluetoothDevice> = bluetoothManager.adapter.bondedDevices.toList()
@@ -162,7 +162,23 @@ class BleClient(private val context: Context,private val callback: MainActivity.
         }
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    fun commsMessage(mode:Byte,data:ByteArray){
+        if(recvMessageBuffer==null){
+            recvMessageBuffer = ByteArray(0)
+        }
+        recvMessageBuffer = recvMessageBuffer!! + data
 
+        if(mode==SNIPPET_LAST){
+            callback.messageReceived(recvMessageBuffer!!)
+            recvMessageBuffer = null
+        }
+
+        if(mode==SNIPPET_INTERMEDIATE){
+            sendCodedMessage(SNIPPET_RECIEVED,ByteArray(0))
+            return
+        }
+    }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     fun connect(device: BluetoothDevice) {
@@ -175,6 +191,26 @@ class BleClient(private val context: Context,private val callback: MainActivity.
         callback.connectionClosed()
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    override fun startMeasuring() {
+        sendCodedMessage(START_MEASUREMENT,ByteArray(0))
+    }
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    override fun requestMeasuring() {
+        sendCodedMessage(REQUEST_MEASUREMENT,ByteArray(0))
+    }
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    override fun stopMeasuring() {
+        sendCodedMessage(STOP_MEASUREMENT,ByteArray(0))
+    }
+
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    override fun sharedResult(distance: Double) {
+        sendCodedMessage(SHARED_RESULT,MainActivity.doubleToByteArray(distance))
+    }
+
 
     public inner class MyBluetoothScannerCallback: ScanCallback(){
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
@@ -183,7 +219,7 @@ class BleClient(private val context: Context,private val callback: MainActivity.
             val i = results.size
             Log.d("ScanCallback","onBatchScanResults: $i devices")
 
-            connect(results[0].device)
+            //connect(results[0].device)
         }
 
         override fun onScanFailed(errorCode : Int)
@@ -196,11 +232,7 @@ class BleClient(private val context: Context,private val callback: MainActivity.
             Log.d("ScanCallback","onScanResult: $callbackType")
         }
     }
-    /*@RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    fun sendMessage(message: String) {
-        val value = message.toByteArray()
-        sendMessage(value)
-    }*/
+
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun sendMessage(data: ByteArray) {
