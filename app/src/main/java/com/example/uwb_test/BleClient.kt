@@ -8,6 +8,7 @@ import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
@@ -28,6 +29,9 @@ class BleClient(private val context: Context,private val callback: MainActivity.
 
     private var sendMessageBuffer : ByteArray? = null
     private var recvMessageBuffer : ByteArray? = null
+
+    private var bleScanner : BluetoothLeScanner? = null
+    private var bleScanCallback : MyBluetoothScannerCallback? = null
 
     private val gattCallback = object : BluetoothGattCallback() {
 
@@ -126,9 +130,9 @@ class BleClient(private val context: Context,private val callback: MainActivity.
             }
         }
         if(flag){
-            val sc = bluetoothManager.adapter.bluetoothLeScanner
-            if(sc!=null){
-                val myScanCallback = MyBluetoothScannerCallback()
+            bleScanner = bluetoothManager.adapter.bluetoothLeScanner
+            if(bleScanner!=null){
+                bleScanCallback = MyBluetoothScannerCallback()
                 Log.d("BleClient","Start Scanning")
 
 
@@ -139,9 +143,9 @@ class BleClient(private val context: Context,private val callback: MainActivity.
                     .build()
 
                 val scanFilter = ScanFilter.Builder().build()
-                sc.startScan(Collections.singletonList(scanFilter), scanSettings,myScanCallback)
+                bleScanner?.startScan(Collections.singletonList(scanFilter), scanSettings,bleScanCallback!!)
 
-
+                /*
                 val list: List<BluetoothDevice> = bluetoothManager.adapter.bondedDevices.toList()
                 val i =list.size
                 //exception?.text = "found $i devices"
@@ -154,7 +158,7 @@ class BleClient(private val context: Context,private val callback: MainActivity.
                         Log.d("BleClient","Null Device")
                 }
                 else
-                    Log.d("BleClient","No Devices")
+                    Log.d("BleClient","No Devices")*/
             }
             else{
                 Log.d("BleClient","No Scanner")
@@ -182,13 +186,76 @@ class BleClient(private val context: Context,private val callback: MainActivity.
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     fun connect(device: BluetoothDevice) {
+
+        //TODO Erlaubnis in eigene Methode auslagern
+        if (
+            (ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) != PackageManager.PERMISSION_GRANTED)
+            || (ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_SCAN
+            ) != PackageManager.PERMISSION_GRANTED)
+        )
+        {
+            ActivityCompat.requestPermissions(context as Activity, arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN),1)
+            if ((ActivityCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) != PackageManager.PERMISSION_GRANTED)
+                || (ActivityCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.BLUETOOTH_SCAN
+                ) != PackageManager.PERMISSION_GRANTED)
+            )
+            {
+                Log.d("BleClient","No Permission")
+                return
+            }
+        }
+        if(bleScanner!= null)
+            bleScanner?.stopScan(bleScanCallback!!)
+
         bluetoothGatt = device.connectGatt(context, false, gattCallback)
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    override fun disconnect(){
-        bluetoothGatt?.close()
+    override fun disconnect() {
+        if (bleScanner != null) {
+            if (
+                (ActivityCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) != PackageManager.PERMISSION_GRANTED)
+                || (ActivityCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.BLUETOOTH_SCAN
+                ) != PackageManager.PERMISSION_GRANTED)
+            )
+            {
+                ActivityCompat.requestPermissions(context as Activity, arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN),1)
+                if ((ActivityCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.BLUETOOTH_CONNECT
+                    ) != PackageManager.PERMISSION_GRANTED)
+                    || (ActivityCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.BLUETOOTH_SCAN
+                    ) != PackageManager.PERMISSION_GRANTED)
+                )
+                {
+                    Log.d("BleClient","No Permission")
+                    return
+                }
+            }
+            bleScanner?.stopScan(bleScanCallback)
+        }
+        if (bluetoothGatt != null) {
+            bluetoothGatt?.close()
+        }
         callback.connectionClosed()
+
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
@@ -227,9 +294,13 @@ class BleClient(private val context: Context,private val callback: MainActivity.
             Log.d("ScanCallback","onScanFailed: $errorCode")
         }
 
-        override fun onScanResult(callbackType : Int,result : ScanResult )
+        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+        override fun onScanResult(callbackType : Int, result : ScanResult )
         {
-            Log.d("ScanCallback","onScanResult: $callbackType")
+            Log.d("ScanCallback","onScanResult: $callbackType, ${result.device.getName()}")
+            //TODO gerät auswählen
+            //if(bluetoothGatt==null)
+             //   connect(result.device)
         }
     }
 

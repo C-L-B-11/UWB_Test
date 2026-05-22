@@ -142,7 +142,7 @@ class BleServer(private val context : Context,private val callback : MainActivit
         if(flag) {
             val advertiseSettings: AdvertiseSettings = AdvertiseSettings.Builder()
                 .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED).setConnectable(true)
-                .setDiscoverable(true).setTimeout(10000).build()
+                .setDiscoverable(true).setTimeout(30000).build()
             val advertiseData: AdvertiseData =
                 AdvertiseData.Builder().setIncludeDeviceName(true).setIncludeTxPowerLevel(true)
                     .build()
