@@ -1,6 +1,7 @@
 package com.example.uwb_test
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
@@ -18,10 +19,13 @@ import android.content.pm.PackageManager
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
+import com.example.uwb_test.MainActivity.Companion.askPermissions
 import java.util.Collections
+import java.util.Dictionary
 
 
-class BleClient(private val context: Context,private val callback: MainActivity.OobConnectionCallback):MainActivity.OobConnection {
+@SuppressLint("MissingPermission")
+class BleClient(private val context: Context, private val callback: MainActivity.OobConnectionCallback):MainActivity.OobConnection {
 
     private val bluetoothManager =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -32,6 +36,8 @@ class BleClient(private val context: Context,private val callback: MainActivity.
 
     private var bleScanner : BluetoothLeScanner? = null
     private var bleScanCallback : MyBluetoothScannerCallback? = null
+
+    private val devices : MutableMap<String, BluetoothDevice> = mutableMapOf<String, BluetoothDevice>()
 
     private val gattCallback = object : BluetoothGattCallback() {
 
@@ -76,7 +82,7 @@ class BleClient(private val context: Context,private val callback: MainActivity.
             characteristic: BluetoothGattCharacteristic,
             value:ByteArray
         ) {
-            val message = value.toString(Charsets.UTF_8)
+            //val message = value.toString(Charsets.UTF_8)
             Log.d("BLE_CLIENT", "recvFragment:${MainActivity.byteToHexString(value)}")
 
             val mode:Byte = value[0]
@@ -95,39 +101,10 @@ class BleClient(private val context: Context,private val callback: MainActivity.
 
     init{
         var flag=true
-        if (
-            (ActivityCompat.checkSelfPermission(
-                context,
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) != PackageManager.PERMISSION_GRANTED)
-            || (ActivityCompat.checkSelfPermission(
-                context,
-                Manifest.permission.BLUETOOTH_ADVERTISE
-            ) != PackageManager.PERMISSION_GRANTED)
-            || (ActivityCompat.checkSelfPermission(
-                context,
-                Manifest.permission.BLUETOOTH_SCAN
-            ) != PackageManager.PERMISSION_GRANTED)
-        )
+        if (!askPermissions(context, *arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.BLUETOOTH_ADVERTISE)))
         {
-            ActivityCompat.requestPermissions(context as Activity, arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_ADVERTISE,Manifest.permission.BLUETOOTH_SCAN),1)
-            if ((ActivityCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.BLUETOOTH_CONNECT
-                ) != PackageManager.PERMISSION_GRANTED)
-                || (ActivityCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.BLUETOOTH_ADVERTISE
-                ) != PackageManager.PERMISSION_GRANTED)
-                || (ActivityCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.BLUETOOTH_SCAN
-                ) != PackageManager.PERMISSION_GRANTED)
-            )
-            {
-                Log.d("BleClient","No Permission")
-                flag = false
-            }
+            Log.d("BleClient","No Permission")
+            flag=false
         }
         if(flag){
             bleScanner = bluetoothManager.adapter.bluetoothLeScanner
@@ -184,35 +161,12 @@ class BleClient(private val context: Context,private val callback: MainActivity.
         }
     }
 
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+    @SuppressLint("MissingPermission")
     fun connect(device: BluetoothDevice) {
-
-        //TODO Erlaubnis in eigene Methode auslagern
-        if (
-            (ActivityCompat.checkSelfPermission(
-                context,
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) != PackageManager.PERMISSION_GRANTED)
-            || (ActivityCompat.checkSelfPermission(
-                context,
-                Manifest.permission.BLUETOOTH_SCAN
-            ) != PackageManager.PERMISSION_GRANTED)
-        )
+        if (!askPermissions(context, *arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN)))
         {
-            ActivityCompat.requestPermissions(context as Activity, arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN),1)
-            if ((ActivityCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.BLUETOOTH_CONNECT
-                ) != PackageManager.PERMISSION_GRANTED)
-                || (ActivityCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.BLUETOOTH_SCAN
-                ) != PackageManager.PERMISSION_GRANTED)
-            )
-            {
-                Log.d("BleClient","No Permission")
-                return
-            }
+            Log.d("BleClient","No Permission")
+            return
         }
         if(bleScanner!= null)
             bleScanner?.stopScan(bleScanCallback!!)
@@ -220,34 +174,14 @@ class BleClient(private val context: Context,private val callback: MainActivity.
         bluetoothGatt = device.connectGatt(context, false, gattCallback)
     }
 
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+
+    @SuppressLint("MissingPermission")
     override fun disconnect() {
         if (bleScanner != null) {
-            if (
-                (ActivityCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.BLUETOOTH_CONNECT
-                ) != PackageManager.PERMISSION_GRANTED)
-                || (ActivityCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.BLUETOOTH_SCAN
-                ) != PackageManager.PERMISSION_GRANTED)
-            )
+            if (!askPermissions(context, *arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN)))
             {
-                ActivityCompat.requestPermissions(context as Activity, arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN),1)
-                if ((ActivityCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.BLUETOOTH_CONNECT
-                    ) != PackageManager.PERMISSION_GRANTED)
-                    || (ActivityCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.BLUETOOTH_SCAN
-                    ) != PackageManager.PERMISSION_GRANTED)
-                )
-                {
-                    Log.d("BleClient","No Permission")
-                    return
-                }
+                Log.d("BleClient","No Permission")
+                return
             }
             bleScanner?.stopScan(bleScanCallback)
         }
@@ -299,6 +233,11 @@ class BleClient(private val context: Context,private val callback: MainActivity.
         {
             Log.d("ScanCallback","onScanResult: $callbackType, ${result.device.getName()}")
             //TODO gerät auswählen
+            if(!devices.contains(result.device.address))
+            {
+                devices[result.device.address] = result.device
+
+            }
             //if(bluetoothGatt==null)
              //   connect(result.device)
         }

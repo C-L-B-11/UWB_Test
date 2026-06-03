@@ -159,11 +159,8 @@ open class MainActivity  : AppCompatActivity() {
             disconnectButton?.isEnabled = false
             swMakeLog?.isEnabled = false
         }
-        if (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
+        if(!askPermissions(this, *arrayOf(Manifest.permission.BLUETOOTH_CONNECT)))
+        {
             return
         }
 
@@ -205,12 +202,10 @@ open class MainActivity  : AppCompatActivity() {
 
     @SuppressLint("SetTextI18n")
     private fun disconnect(){
-        if ((ActivityCompat.checkSelfPermission(this,Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED))
-        {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_ADVERTISE,Manifest.permission.BLUETOOTH_SCAN),1)
-            if ((ActivityCompat.checkSelfPermission(this,Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED))
+
+            if (!askPermissions(this, *arrayOf(Manifest.permission.BLUETOOTH_CONNECT)))
             {exception?.text = "No Permission";return}
-        }
+
 
         if(oobConnector!=null ) {
             oobConnector?.disconnect()
@@ -451,6 +446,16 @@ open class MainActivity  : AppCompatActivity() {
     }
 
     companion object {
+        fun askPermissions(context: Context, vararg permissions: String):Boolean {
+            for (permission in permissions) {
+                if (ActivityCompat.checkSelfPermission(context,permission) == PackageManager.PERMISSION_GRANTED)
+                    continue
+                ActivityCompat.requestPermissions(context as Activity,arrayOf(permission),1)
+                if (ActivityCompat.checkSelfPermission(context,permission) != PackageManager.PERMISSION_GRANTED)
+                    return false
+            }
+            return true
+        }
         fun byteToHexString(data:ByteArray):String{
             var s = ""
             for(b in data)

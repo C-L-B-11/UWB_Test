@@ -1,6 +1,7 @@
 package com.example.uwb_test
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 
 import android.bluetooth.BluetoothDevice
@@ -19,9 +20,11 @@ import android.content.pm.PackageManager
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
+import com.example.uwb_test.MainActivity.Companion.askPermissions
 
 
-class BleServer(private val context : Context,private val callback : MainActivity.OobConnectionCallback): MainActivity.OobConnection {
+@SuppressLint("MissingPermission")
+class BleServer(private val context : Context, private val callback : MainActivity.OobConnectionCallback): MainActivity.OobConnection {
 
     private val bluetoothManager =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -64,7 +67,7 @@ class BleServer(private val context : Context,private val callback : MainActivit
             offset: Int,
             value: ByteArray
         ) {
-            val received = value.toString(Charsets.UTF_8)
+            //val received = value.toString(Charsets.UTF_8)
             Log.d("BLE_SERVER", "recvFragment: ${MainActivity.byteToHexString(value)}")
 
             val mode:Byte = value[0]
@@ -132,12 +135,10 @@ class BleServer(private val context : Context,private val callback : MainActivit
 
     init{
         var flag=true
-        if ((ActivityCompat.checkSelfPermission(context,Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED))
+        if (!askPermissions(context, *arrayOf(Manifest.permission.BLUETOOTH_CONNECT)))
         {
-            ActivityCompat.requestPermissions(context as Activity, arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_ADVERTISE,Manifest.permission.BLUETOOTH_SCAN),1)
-            if ((ActivityCompat.checkSelfPermission(context,Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED))
-            {Log.d("BleServer","No Permission")
-                flag=false}
+            Log.d("BleServer","No Permission")
+            flag = false
         }
         if(flag) {
             val advertiseSettings: AdvertiseSettings = AdvertiseSettings.Builder()
