@@ -17,6 +17,8 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
+import android.widget.Button
+import android.widget.PopupMenu
 import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
 import com.example.uwb_test.MainActivity.Companion.askPermissions
@@ -37,7 +39,9 @@ class BleClient(private val context: Context, private val callback: MainActivity
     private var bleScanner : BluetoothLeScanner? = null
     private var bleScanCallback : MyBluetoothScannerCallback? = null
 
-    private val devices : MutableMap<String, BluetoothDevice> = mutableMapOf<String, BluetoothDevice>()
+    private val devices : MutableMap<String, Int> = mutableMapOf<String,Int>()
+    private val devices2 : MutableList<BluetoothDevice?> = mutableListOf<BluetoothDevice?>()
+    private var popupMenu : PopupMenu? = null
 
     private val gattCallback = object : BluetoothGattCallback() {
 
@@ -121,7 +125,25 @@ class BleClient(private val context: Context, private val callback: MainActivity
 
                 val scanFilter = ScanFilter.Builder().build()
                 bleScanner?.startScan(Collections.singletonList(scanFilter), scanSettings,bleScanCallback!!)
+                //setContentView(R.layout.activity_Main)
+                //val view = inflater.inflate(R.layout.activity_main).findViewById(R.id.ConButton)
+                popupMenu = PopupMenu(context,context.findViewById(R.id.ConButton))
 
+                popupMenu?.setOnMenuItemClickListener { item ->
+                    val device = devices2[item.itemId]
+                    popupMenu?.dismiss()
+                    if(device!=null)
+                        connect(device)
+
+                    true
+                }
+
+                devices2.add(null)
+                val index : Int = devices2.size-1
+                devices["0"] = index
+                val name : CharSequence = "TestGerät,DON'T TOUCH"
+                popupMenu?.menu?.add(0, index,0,name)
+                popupMenu?.show()
                 /*
                 val list: List<BluetoothDevice> = bluetoothManager.adapter.bondedDevices.toList()
                 val i =list.size
@@ -231,12 +253,16 @@ class BleClient(private val context: Context, private val callback: MainActivity
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         override fun onScanResult(callbackType : Int, result : ScanResult )
         {
-            Log.d("ScanCallback","onScanResult: $callbackType, ${result.device.getName()}")
-            //TODO gerät auswählen
+            Log.d("ScanCallback","onScanResult: $callbackType, ${result.device.name}")
+
             if(!devices.contains(result.device.address))
             {
-                devices[result.device.address] = result.device
-
+                devices2.add(result.device)
+                val index : Int = devices2.size-1
+                devices[result.device.address] = index
+                val name : CharSequence = result.device.name
+                popupMenu?.menu?.add(0, index,0,name)
+                popupMenu?.show()
             }
             //if(bluetoothGatt==null)
              //   connect(result.device)

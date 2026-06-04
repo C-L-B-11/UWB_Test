@@ -63,7 +63,7 @@ open class MainActivity  : AppCompatActivity() {
     private var swIsController: Switch? = null
     @SuppressLint("UseSwitchCompatOrMaterialCode")
     private var swMakeLog: Switch? = null
-    private var connectButton: Button? = null
+    public var connectButton: Button? = null
     private var disconnectButton: Button? = null
 
     private var startMeasuringButton: Button? = null
