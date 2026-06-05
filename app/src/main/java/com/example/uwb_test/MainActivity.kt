@@ -28,6 +28,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.core.uwb.RangingCapabilities
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -94,6 +95,9 @@ open class MainActivity  : AppCompatActivity() {
         setContentView(R.layout.activity_main);
         rangingManager = baseContext.getSystemService(RangingManager::class.java) as RangingManager
         initUI()
+        transportHandle = MyTransportHandle()
+
+        rangingManager?.registerCapabilitiesCallback(MyExecutor(),MyRangingCapabilitiesCallback())
         //uwbMan = UwbManager.createInstance(baseContext)
 
     }
@@ -112,10 +116,6 @@ open class MainActivity  : AppCompatActivity() {
         startMeasuringButton!!.setOnClickListener  { _ -> startMeasuringBtn() }
         stopMeasuringButton = findViewById<Button>(R.id.StopMsgBtn)
         stopMeasuringButton!!.setOnClickListener  { _ -> stopMeasuringBtn() }
-
-
-        transportHandle = MyTransportHandle()
-
     }
 
     private fun stopMeasuringBtn()
@@ -225,7 +225,7 @@ open class MainActivity  : AppCompatActivity() {
             oobConnector = BleServer(baseContext,  transportHandle as OobConnectionCallback)
         }
         else {
-            oobConnector = BleClient(baseContext,  transportHandle as OobConnectionCallback)
+            oobConnector = BleClient(baseContext,  transportHandle as OobConnectionCallback, connectButton!!)
         }
         connectButton?.isEnabled=false
         disconnectButton?.isEnabled=true
@@ -254,6 +254,7 @@ open class MainActivity  : AppCompatActivity() {
         )
     }
 
+    @SuppressLint("DefaultLocale")
     public fun gotResult(data:Double){
         runOnUiThread {
             tvRangeDisplay?.text = buildString {
@@ -366,6 +367,12 @@ open class MainActivity  : AppCompatActivity() {
 
     }
 
+    public inner class MyRangingCapabilitiesCallback:RangingManager.RangingCapabilitiesCallback{
+        override fun onRangingCapabilities(p0: android.ranging.RangingCapabilities) {
+            Log.d("RangingCapa",p0.toString())
+        }
+    }
+
     public class MyExecutor : Executor {
         override fun execute(r: Runnable) {
             r.run()
@@ -428,6 +435,7 @@ open class MainActivity  : AppCompatActivity() {
     fun onFileSaveCancelled() {
         Toast.makeText(this, "Save cancelled.", Toast.LENGTH_SHORT).show()
     }
+
     private fun writeContentToUri(uri: Uri) {
         try {
             contentResolver.openOutputStream(uri)?.use { outputStream ->

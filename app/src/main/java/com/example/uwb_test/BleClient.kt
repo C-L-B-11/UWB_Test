@@ -17,6 +17,7 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
+import android.view.View
 import android.widget.Button
 import android.widget.PopupMenu
 import androidx.annotation.RequiresPermission
@@ -27,7 +28,7 @@ import java.util.Dictionary
 
 
 @SuppressLint("MissingPermission")
-class BleClient(private val context: Context, private val callback: MainActivity.OobConnectionCallback):MainActivity.OobConnection {
+class BleClient(private val context: Context, private val callback: MainActivity.OobConnectionCallback, private val view: View):MainActivity.OobConnection {
 
     private val bluetoothManager =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -127,7 +128,8 @@ class BleClient(private val context: Context, private val callback: MainActivity
                 bleScanner?.startScan(Collections.singletonList(scanFilter), scanSettings,bleScanCallback!!)
                 //setContentView(R.layout.activity_Main)
                 //val view = inflater.inflate(R.layout.activity_main).findViewById(R.id.ConButton)
-                popupMenu = PopupMenu(context,context.findViewById(R.id.ConButton))
+                popupMenu = PopupMenu(context,view)
+
 
                 popupMenu?.setOnMenuItemClickListener { item ->
                     val device = devices2[item.itemId]
@@ -137,12 +139,12 @@ class BleClient(private val context: Context, private val callback: MainActivity
 
                     true
                 }
-
+                /*
                 devices2.add(null)
                 val index : Int = devices2.size-1
                 devices["0"] = index
                 val name : CharSequence = "TestGerät,DON'T TOUCH"
-                popupMenu?.menu?.add(0, index,0,name)
+                popupMenu?.menu?.add(0, index,0,name)*/
                 popupMenu?.show()
                 /*
                 val list: List<BluetoothDevice> = bluetoothManager.adapter.bondedDevices.toList()
