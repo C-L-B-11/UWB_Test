@@ -30,8 +30,10 @@ class BleServer(private val context : Context, private val callback : MainActivi
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
 
     private var myDevice: BluetoothDevice? = null
-    private var sendMessageBuffer : ByteArray? = null
-    private var recvMessageBuffer : ByteArray? = null
+
+    private val sP : (ByteArray) ->Unit = {d:ByteArray -> sendFinalMessage(d)}
+    private val rM : (ByteArray) ->Unit = {d:ByteArray -> callback.messageReceived(d)}
+    private var tcpAdapter = TPCforBLE(sP,rM,20)
 
     public val characteristic = BluetoothGattCharacteristic(
         CHAR_UUID,
@@ -76,37 +78,17 @@ class BleServer(private val context : Context, private val callback : MainActivi
                 gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
             }
             when(mode){
-                SNIPPET_RECIEVED -> startSend()
                 START_MEASUREMENT -> callback.startMeasuringOrder()
                 REQUEST_MEASUREMENT -> callback.requestMeasuring()
                 STOP_MEASUREMENT -> callback.stopMeasuring()
-                SNIPPET_LAST -> commsMessage(mode,data)
-                SNIPPET_INTERMEDIATE -> commsMessage(mode,data)
                 SHARED_RESULT -> callback.sharedResult(MainActivity.byteArrayToDouble(data))
+                else -> if(!tcpAdapter.receivedPackage(value))Log.d("BLE_SERVER","tcpAdapter failed to process")
             }
-
 
 
         }
 
-        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-        fun commsMessage(mode:Byte,data:ByteArray){
-            if(recvMessageBuffer==null){
-                recvMessageBuffer = ByteArray(0)
-            }
-            recvMessageBuffer = recvMessageBuffer!! + data
 
-            if(mode==SNIPPET_LAST){
-                callback.messageReceived(recvMessageBuffer!!)
-                recvMessageBuffer=null
-            }
-
-
-            if(mode==SNIPPET_INTERMEDIATE){
-                sendCodedMessage(SNIPPET_RECIEVED,ByteArray(0))
-                return
-            }
-        }
 
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         override fun onCharacteristicReadRequest(
@@ -172,6 +154,7 @@ class BleServer(private val context : Context, private val callback : MainActivi
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun disconnect(){
+        tcpAdapter.reset()
         if(bluetoothManager.getConnectedDevices(BluetoothProfile.GATT_SERVER).size==0){
             gattServer?.close()
             callback.connectionClosed()
@@ -207,39 +190,13 @@ class BleServer(private val context : Context, private val callback : MainActivi
     }*/
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun sendMessage(data:ByteArray) {
-        if(sendMessageBuffer!=null){
-            Log.d("BLE_SERVER","Still busy with sending")
-        }
-        sendMessageBuffer = data
-        startSend()
+        tcpAdapter.sendMessage(data)
     }
 
     override fun isInitiator(): Boolean {
         return false
     }
 
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    private fun startSend(){
-        if(sendMessageBuffer==null){
-            Log.d("BLE_SERVER","NothingToSend")
-            return
-        }
-        val sendSize:Int = sendMessageBuffer?.size!!
-        var data:ByteArray?
-        var mode:Byte
-        if(sendSize>19) {
-            data = sendMessageBuffer?.copyOfRange(0, 19)
-            sendMessageBuffer = sendMessageBuffer?.copyOfRange(19,sendSize)
-            mode = SNIPPET_INTERMEDIATE
-        }
-        else{
-            data = sendMessageBuffer
-            mode = SNIPPET_LAST
-            sendMessageBuffer = null
-        }
-
-        sendCodedMessage(mode,data!!)
-    }
 
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
@@ -250,10 +207,17 @@ class BleServer(private val context : Context, private val callback : MainActivi
         var sendData = ByteArray(1)
         sendData[0]=mode
         sendData += data
+        sendFinalMessage(sendData)
+    }
+
+    private fun sendFinalMessage(data:ByteArray){
+        if(data.size>20){
+            throw Exception("Data too long")
+        }
         if(myDevice!=null){
             val d:BluetoothDevice = myDevice!!
-            gattServer?.notifyCharacteristicChanged(d, characteristic, false, sendData)
-            Log.d("BLE_SERVER","sendFragment: ${MainActivity.byteToHexString(sendData)}")
+            gattServer?.notifyCharacteristicChanged(d, characteristic, false, data)
+            Log.d("BLE_SERVER","sendFragment: ${MainActivity.byteToHexString(data)}")
         }
     }
 

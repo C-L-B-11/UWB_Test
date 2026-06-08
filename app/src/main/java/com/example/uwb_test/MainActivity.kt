@@ -45,14 +45,12 @@ import kotlin.time.ExperimentalTime
 val SERVICE_UUID: UUID = UUID.fromString("0000180D-0000-1000-8000-00805f9b34fb")
 val CHAR_UUID: UUID = UUID.fromString("00002A37-0000-1000-8000-00805f9b34fb")
 
-const val SNIPPET_RECIEVED:Byte = 0
-const val SNIPPET_LAST:Byte = 1
-const val SNIPPET_INTERMEDIATE:Byte  = 2
 
-const val START_MEASUREMENT:Byte = 10
-const val REQUEST_MEASUREMENT:Byte = 11
-const val STOP_MEASUREMENT:Byte = 12
-const val SHARED_RESULT:Byte = 13
+
+const val START_MEASUREMENT:Byte = 1
+const val REQUEST_MEASUREMENT:Byte = 2
+const val STOP_MEASUREMENT:Byte = 3
+const val SHARED_RESULT:Byte = 4
 
 open class MainActivity  : AppCompatActivity() {
 
