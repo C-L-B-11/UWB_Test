@@ -12,9 +12,9 @@ import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
 class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,pcktLen_:Int){
-    private val DataPackage :Byte = 0b00001000
-    private val AckPackage : Byte = 0b00001001
-    private val FinPackage : Byte = 0b00001010
+    private val DATA_PACKAGE :Byte = 0b00001000
+    private val ACK_PACKAGE : Byte = 0b00001001
+    private val FIN_PACKAGE : Byte = 0b00001010
 
 
     private val maxpackageLenght = pcktLen_
@@ -69,7 +69,7 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
     
     private fun handleIdle(modeLocal:Byte,packageIdLocal:Byte,data:ByteArray):Boolean{
         when(modeLocal){
-            DataPackage -> {
+            DATA_PACKAGE -> {
                 if( packageIdLocal != 0.toByte()) {
                     Log.d("TCP","Unexpected non 0 Data package in Idle")
                     return false
@@ -79,13 +79,13 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
                 lastPackageId = packageIdLocal
             }
 
-            AckPackage -> {
+            ACK_PACKAGE -> {
                 Log.d("TCP","Unexpected Ack package in Idle")
                 return false
             }
 
-            FinPackage -> {
-                outboundPackage(byteArrayOf(FinPackage, 0.toByte()))
+            FIN_PACKAGE -> {
+                outboundPackage(byteArrayOf(FIN_PACKAGE, 0.toByte()))
             }
         }
         return true
@@ -93,23 +93,23 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
 
     private fun handleReceive(modeLocal:Byte, packageIdLocal:Byte, data:ByteArray):Boolean{
         when(modeLocal){
-            DataPackage -> {
+            DATA_PACKAGE -> {
                 if(packageIdLocal == (lastPackageId!! + 1.toByte()).toByte()){
                     recvMessageBuffer = recvMessageBuffer!! + data
                     lastPackageId = packageIdLocal
                 }
-                outboundPackage(byteArrayOf(AckPackage,lastPackageId!!))
+                outboundPackage(byteArrayOf(ACK_PACKAGE,lastPackageId!!))
 
             }
 
-            AckPackage -> {
+            ACK_PACKAGE -> {
                 Log.d("TCP","Unexpected Ack for Receiver")
                 return false
             }
 
-            FinPackage -> {
+            FIN_PACKAGE -> {
                 modeMain = TCPModes.Idle
-                sendPackageFunction(byteArrayOf(FinPackage,0.toByte()))
+                sendPackageFunction(byteArrayOf(FIN_PACKAGE,0.toByte()))
                 receivedMessageFunction(recvMessageBuffer!!)
                 recvMessageBuffer = null
                 lastPackageId = null
@@ -120,19 +120,19 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
     }
     private fun handleSend(modeLocal:Byte,packageIdLocal:Byte,data:ByteArray):Boolean{
         when(modeLocal){
-            DataPackage -> {return false}
+            DATA_PACKAGE -> {return false}
 
-            AckPackage -> {
+            ACK_PACKAGE -> {
                 if(packageIdLocal >= totalPackages()-1){
-                    outboundPackage(byteArrayOf(FinPackage,0.toByte()))
+                    outboundPackage(byteArrayOf(FIN_PACKAGE,0.toByte()))
                 }
                 else{
                     lastPackageId = (packageIdLocal + 1).toByte()
-                    outboundPackage(byteArrayOf(DataPackage,lastPackageId!!) + getPackageData(lastPackageId!!.toInt()))
+                    outboundPackage(byteArrayOf(DATA_PACKAGE,lastPackageId!!) + getPackageData(lastPackageId!!.toInt()))
                 }
             }
 
-            FinPackage -> {
+            FIN_PACKAGE -> {
                 sendMessageBuffer = null
                 lastPackageId = null
                 modeMain = TCPModes.Idle
@@ -149,7 +149,7 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
         modeMain = TCPModes.Send
         sendMessageBuffer = message
         lastPackageId = 0.toByte()
-        outboundPackage(byteArrayOf(DataPackage,lastPackageId!!) + getPackageData(0))
+        outboundPackage(byteArrayOf(DATA_PACKAGE,lastPackageId!!) + getPackageData(0))
 
         
         return true

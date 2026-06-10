@@ -68,7 +68,6 @@ open class MainActivity  : AppCompatActivity() {
     private var startMeasuringButton: Button? = null
     private var stopMeasuringButton: Button? = null
 
-    //private var uwbMan: UwbManager? = null
     private var rangingManager :RangingManager? = null
 
     private var oobConnector : OobConnection? = null
@@ -85,7 +84,6 @@ open class MainActivity  : AppCompatActivity() {
     }
 
 
-    //private val scope = CoroutineScope(Dispatchers.IO)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,7 +94,6 @@ open class MainActivity  : AppCompatActivity() {
         transportHandle = MyTransportHandle()
 
         rangingManager?.registerCapabilitiesCallback(MyExecutor(),MyRangingCapabilitiesCallback())
-        //uwbMan = UwbManager.createInstance(baseContext)
 
     }
 

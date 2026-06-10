@@ -69,8 +69,7 @@ class BleServer(private val context : Context, private val callback : MainActivi
             offset: Int,
             value: ByteArray
         ) {
-            //val received = value.toString(Charsets.UTF_8)
-            Log.d("BLE_SERVER", "recvFragment: ${MainActivity.byteToHexString(value)}")
+            //Log.d("BLE_SERVER", "recvFragment: ${MainActivity.byteToHexString(value)}")
 
             val mode:Byte = value[0]
             var data = value.copyOfRange(1,value.size)
@@ -182,12 +181,6 @@ class BleServer(private val context : Context, private val callback : MainActivi
         sendCodedMessage(STOP_MEASUREMENT,ByteArray(0))
     }
 
-    /*@RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    fun sendMessage( message: String) {
-
-        val value = message.toByteArray()
-        sendMessage(value)
-    }*/
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun sendMessage(data:ByteArray) {
         tcpAdapter.sendMessage(data)

@@ -75,8 +75,6 @@ class BleClient(private val context: Context, private val callback: MainActivity
             value: ByteArray,
             status: Int
         ) {
-
-            //val message = value.toString(Charsets.UTF_8)
             //Log.d("BLE_CLIENT", "Read: $value")
 
         }
@@ -87,8 +85,7 @@ class BleClient(private val context: Context, private val callback: MainActivity
             characteristic: BluetoothGattCharacteristic,
             value:ByteArray
         ) {
-            //val message = value.toString(Charsets.UTF_8)
-            Log.d("BLE_CLIENT", "recvFragment:${MainActivity.byteToHexString(value)}")
+            //Log.d("BLE_CLIENT", "recvFragment:${MainActivity.byteToHexString(value)}")
 
             val mode:Byte = value[0]
             var data = value.copyOfRange(1,value.size)
@@ -124,39 +121,7 @@ class BleClient(private val context: Context, private val callback: MainActivity
 
                 val scanFilter = ScanFilter.Builder().build()
                 bleScanner?.startScan(Collections.singletonList(scanFilter), scanSettings,bleScanCallback!!)
-                /*
-                popupMenu = PopupMenu(context,view)
 
-
-                popupMenu?.setOnMenuItemClickListener { item ->
-                    val device = devices2[item.itemId]
-                    popupMenu?.dismiss()
-                    if(device!=null)
-                        connect(device)
-
-                    true
-                }*/
-
-                /*devices2.add(null)
-                val index : Int = devices2.size-1
-                devices["0"] = index
-                val name : CharSequence = "TestGerät,DON'T TOUCH"
-                popupMenu?.menu?.add(0, index,0,name)*/
-                //popupMenu?.show()
-                /*
-                val list: List<BluetoothDevice> = bluetoothManager.adapter.bondedDevices.toList()
-                val i =list.size
-                //exception?.text = "found $i devices"
-
-                if(i!=0) {
-                    val bDev : BluetoothDevice = list[0]
-                    if(bDev !=null)
-                        connect(bDev)
-                    else
-                        Log.d("BleClient","Null Device")
-                }
-                else
-                    Log.d("BleClient","No Devices")*/
             }
             else{
                 Log.d("BleClient","No Scanner")
@@ -237,10 +202,11 @@ class BleClient(private val context: Context, private val callback: MainActivity
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         override fun onScanResult(callbackType : Int, result : ScanResult )
         {
-            Log.d("ScanCallback","onScanResult: $callbackType, ${result.device.name}")
+            //Log.d("ScanCallback","onScanResult: $callbackType, ${result.device.name}")
 
             if(!devices.contains(result.device.address))
             {
+                Log.d("ScanCallback","Found new device: ${result.device.address}")
                 if(popupMenu==null){
                     popupMenu = PopupMenu(context,view)
 
@@ -263,8 +229,6 @@ class BleClient(private val context: Context, private val callback: MainActivity
                 popupMenu?.menu?.add(0, index,0,name)
                 popupMenu?.show()
             }
-            //if(bluetoothGatt==null)
-             //   connect(result.device)
         }
     }
 
