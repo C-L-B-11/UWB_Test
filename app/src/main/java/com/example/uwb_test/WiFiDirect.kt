@@ -16,76 +16,108 @@ import com.google.android.gms.nearby.connection.Payload
 import com.google.android.gms.nearby.connection.PayloadCallback
 import com.google.android.gms.nearby.connection.PayloadTransferUpdate
 import com.google.android.gms.nearby.connection.Strategy
+import com.example.uwb_test.MainActivity.Companion.askPermissions
 
-class WiFiDirect(private val context: Context, private val callback: MainActivity.OobConnectionCallback,private val isHost:Boolean): MainActivity.OobConnection {
+class WiFiDirect(private val contextM: Context, private val callback: MainActivity.OobConnectionCallback,private val isHost:Boolean): MainActivity.OobConnection {
 
     private val DATA_PACKAGE :Byte = 0b00001000
     private val STRATEGY = Strategy.P2P_POINT_TO_POINT
     private val SERVICE_ID = "com.example.myapp.DATA_EXCHANGE_SERVICE"
-    private lateinit var connectionsClient: ConnectionsClient
+    private var connectionsClient: ConnectionsClient? = null
+    private var connectionLifecycleCallback = MyConnectionLifecycleCallback()
+    private var payloadCallback = MyPayloadCallback()
+    private var endpointDiscoveryCallback = MyEndpointDiscoveryCallback()
 
     init{
-        connectionsClient = Nearby.getConnectionsClient(context)
-        if(isHost){
-            startAdvertising()
+
+
+        connectionsClient = Nearby.getConnectionsClient(contextM)
+        if(connectionsClient==null){
+            Log.d("WifiDirekt", "no Client")
         }
-        else{
-            startDiscovering()
+        else {
+            if (isHost) {
+                startAdvertising()
+            } else {
+                startDiscovering()
+            }
         }
+
     }
 
     private fun startAdvertising() {
+        if(!askPermissions(contextM,*arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION,android.Manifest.permission.NEARBY_WIFI_DEVICES))){
+            Log.d("WifiDirekt", "no Permission")
+        }
         val options = AdvertisingOptions.Builder().setStrategy(STRATEGY).build()
 
-        connectionsClient.startAdvertising(
+        connectionsClient?.startAdvertising(
             "Pixel 10 Host", // User-friendly device name visible to the other phone
             SERVICE_ID,
             connectionLifecycleCallback,
             options
-        ).addOnSuccessListener {
+        )?.addOnSuccessListener {
             // Advertising successfully started, waiting for discoverer
-        }.addOnFailureListener { e ->
+        }?.addOnFailureListener { e ->
             // Handle failure
         }
     }
     private fun startDiscovering() {
+        if(!askPermissions(contextM,*arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION,android.Manifest.permission.NEARBY_WIFI_DEVICES))){
+            Log.d("WifiDirekt", "no Permission")
+        }
         val options = DiscoveryOptions.Builder().setStrategy(STRATEGY).build()
-
-        connectionsClient.startDiscovery(
+        if(options==null){
+            Log.d("WifiDirekt", "no options")
+            return
+        }
+        if(SERVICE_ID==null){
+            Log.d("WifiDirekt", "no SERVICE_ID")
+            return
+        }
+        if(endpointDiscoveryCallback==null){
+            Log.d("WifiDirekt", "no endpointDiscoveryCallback")
+            return
+        }
+        if(connectionsClient==null){
+            Log.d("WifiDirekt", "no connectionsClient")
+            return
+        }
+        connectionsClient?.startDiscovery(
             SERVICE_ID,
             endpointDiscoveryCallback,
             options
-        ).addOnSuccessListener {
+        )?.addOnSuccessListener {
             // Discovery successfully started, searching for host
-        }.addOnFailureListener { e ->
+        }?.addOnFailureListener { e ->
             // Handle failure
         }
     }
     // Used by the Discoverer to detect the Advertiser
-    private val endpointDiscoveryCallback = object : EndpointDiscoveryCallback() {
+    private inner class MyEndpointDiscoveryCallback : EndpointDiscoveryCallback() {
         override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
             // Automatically request a connection to the discovered host
-            connectionsClient.requestConnection("Pixel 10 Client", endpointId, connectionLifecycleCallback)
+            connectionsClient?.requestConnection("Pixel 10 Client", endpointId, connectionLifecycleCallback)
         }
 
         override fun onEndpointLost(endpointId: String) {}
     }
 
     // Used by both devices to manage the lifecyle of the active request
-    private val connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
-        public lateinit var endpointId: String
+    private inner class MyConnectionLifecycleCallback: ConnectionLifecycleCallback() {
+        public var endpointId: String? = null
 
-        override fun onConnectionInitiated(endpointId: String, connectionInfo: ConnectionInfo) {
+        override fun onConnectionInitiated(endpointIdL: String, connectionInfo: ConnectionInfo) {
             // Automatically accept the connection request on both ends
-            connectionsClient.acceptConnection(endpointId, payloadCallback)
+            connectionsClient?.acceptConnection(endpointIdL, payloadCallback)
         }
 
-        override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
+        override fun onConnectionResult(endpointIdL: String, result: ConnectionResolution) {
             if (result.status.isSuccess) {
                 // Connection established! Stop scanning/advertising to save battery
-                connectionsClient.stopAdvertising()
-                connectionsClient.stopDiscovery()
-                this.endpointId = endpointId
+                connectionsClient?.stopAdvertising()
+                connectionsClient?.stopDiscovery()
+                this.endpointId = endpointIdL
                 // You can now safely pass your data using this endpointId
                 callback.connectionEstablished()
             }
@@ -98,12 +130,15 @@ class WiFiDirect(private val context: Context, private val callback: MainActivit
     }
 
     private fun sendCustomByteArray( mode:Byte, data: ByteArray) {
+        if(connectionLifecycleCallback.endpointId==null){
+            Log.d("WifiDirekt", "Can not send Data, no endpointId")
+            return
+        }
         val payload = Payload.fromBytes(byteArrayOf(mode) + data)
-        connectionsClient.sendPayload(connectionLifecycleCallback.endpointId, payload)
-            .addOnFailureListener { e -> /* Handle send failure */ }
+        connectionsClient?.sendPayload(connectionLifecycleCallback.endpointId!!, payload)?.addOnFailureListener { e -> /* Handle send failure */ }
     }
 
-    private val payloadCallback = object : PayloadCallback() {
+    inner class MyPayloadCallback  : PayloadCallback() {
         override fun onPayloadReceived(endpointId: String, payload: Payload) {
             if (payload.type == Payload.Type.BYTES) {
                 val receivedBytes: ByteArray? = payload.asBytes()
@@ -140,7 +175,8 @@ class WiFiDirect(private val context: Context, private val callback: MainActivit
     }
 
     override fun disconnect() {
-        connectionsClient.disconnectFromEndpoint(connectionLifecycleCallback.endpointId)
+        if(connectionLifecycleCallback.endpointId!=null)
+            connectionsClient?.disconnectFromEndpoint(connectionLifecycleCallback.endpointId!!)
         callback.connectionClosed()
     }
 

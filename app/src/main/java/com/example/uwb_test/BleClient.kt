@@ -235,8 +235,9 @@ class BleClient(private val context: Context, private val callback: MainActivity
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun sendMessage(data: ByteArray) {
+        //Log.d("BLE_CLIENT","send message: ${MainActivity.byteToHexString(data)}")
         if(!tcpAdapter.sendMessage(data)){
-            Log.d("BLE_SERVER","Sending through tcp failed")
+            Log.d("BLE_CLIENT","Sending through tcp failed")
         }
     }
 
@@ -264,7 +265,7 @@ class BleClient(private val context: Context, private val callback: MainActivity
         }
         val service = bluetoothGatt?.getService(SERVICE_UUID) ?: return
         val characteristic = service.getCharacteristic(CHAR_UUID)
-        Log.d("BLE_CLIENT","sendFragment: ${MainActivity.byteToHexString(data)}")
+        //Log.d("BLE_CLIENT","sendFragment: ${MainActivity.byteToHexString(data)}")
 
         bluetoothGatt?.writeCharacteristic(characteristic, data, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
     }

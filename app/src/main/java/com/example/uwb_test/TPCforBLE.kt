@@ -176,7 +176,7 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
         sendPackageFunction(pack)
 
         repeatTimer = CoroutineScope(Dispatchers.Main).launch {
-            delay(2000)
+            delay(500)
             if(lastPackage != null)
                 outboundPackage(lastPackage!!)
         }

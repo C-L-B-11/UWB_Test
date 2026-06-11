@@ -22,6 +22,7 @@ import android.ranging.oob.TransportHandle
 import android.util.Log
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.RadioButton
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
@@ -78,6 +79,10 @@ open class MainActivity  : AppCompatActivity() {
 
     private var logEntries :  ArrayList<String>? = null
 
+
+    private var oobMode = OOBTechnology.BLE
+    private var rangingMode = RangingTechnology.AUTO
+
     private val saveLauncher = registerForActivityResult(SaveFileContract()) { uri: Uri? ->
         if (uri != null) writeContentToUri(uri)
         else             onFileSaveCancelled()
@@ -111,6 +116,26 @@ open class MainActivity  : AppCompatActivity() {
         startMeasuringButton!!.setOnClickListener  { _ -> startMeasuringBtn() }
         stopMeasuringButton = findViewById<Button>(R.id.StopMsgBtn)
         stopMeasuringButton!!.setOnClickListener  { _ -> stopMeasuringBtn() }
+
+
+        findViewById<RadioButton>(R.id.rbTecOOBBLE).setOnCheckedChangeListener { buttonView, isChecked ->
+            if(isChecked)oobMode = OOBTechnology.BLE
+        }
+        findViewById<RadioButton>(R.id.rbTecOOBWIFI).setOnCheckedChangeListener { buttonView, isChecked ->
+            if(isChecked)oobMode = OOBTechnology.WIFI
+        }
+        findViewById<RadioButton>(R.id.rbTecRangAUTO).setOnCheckedChangeListener { buttonView, isChecked ->
+            if(isChecked)rangingMode = RangingTechnology.AUTO
+        }
+        findViewById<RadioButton>(R.id.rbTecRangWIFI).setOnCheckedChangeListener { buttonView, isChecked ->
+            if(isChecked)rangingMode = RangingTechnology.WIFI
+        }
+        findViewById<RadioButton>(R.id.rbTecRangUWB).setOnCheckedChangeListener { buttonView, isChecked ->
+            if(isChecked)rangingMode = RangingTechnology.UWB
+        }
+        findViewById<RadioButton>(R.id.rbTecRangBLE).setOnCheckedChangeListener { buttonView, isChecked ->
+            if(isChecked)rangingMode = RangingTechnology.BLE
+        }
     }
 
     private fun stopMeasuringBtn()
@@ -146,6 +171,7 @@ open class MainActivity  : AppCompatActivity() {
             startMeasuring()
         }
     }
+
     @SuppressLint("NewApi")
     private fun startMeasuring(){
         runOnUiThread {
@@ -170,7 +196,12 @@ open class MainActivity  : AppCompatActivity() {
 
         val deviceHandle: DeviceHandle = DeviceHandle.Builder(rangingDevice,transportHandle!!)
             .build()
-        val filter: Set<Int> = setOf(RangingManager.BLE_CS,RangingManager.WIFI_NAN_RTT,RangingManager.UWB)
+        val filter: Set<Int> = when(rangingMode){
+            RangingTechnology.BLE -> setOf(RangingManager.BLE_CS)
+            RangingTechnology.WIFI -> setOf(RangingManager.WIFI_NAN_RTT)
+            RangingTechnology.UWB -> setOf(RangingManager.UWB)
+            else -> setOf(RangingManager.BLE_CS,RangingManager.WIFI_NAN_RTT,RangingManager.UWB,)
+        }
         if(swIsController?.isChecked == true) {
             role= RangingPreference.DEVICE_ROLE_INITIATOR
 
@@ -197,10 +228,8 @@ open class MainActivity  : AppCompatActivity() {
 
     @SuppressLint("SetTextI18n")
     private fun disconnect(){
-
-            if (!askPermissions(this, *arrayOf(Manifest.permission.BLUETOOTH_CONNECT)))
+        if (!askPermissions(this, *arrayOf(Manifest.permission.BLUETOOTH_CONNECT)))
             {exception?.text = "No Permission";return}
-
 
         if(oobConnector!=null ) {
             oobConnector?.disconnect()
@@ -216,11 +245,15 @@ open class MainActivity  : AppCompatActivity() {
 
     private fun connect() {
 
-        if(swIsController?.isChecked==false){
-            oobConnector = BleServer(baseContext,  transportHandle as OobConnectionCallback)
+        if(oobMode==OOBTechnology.WIFI){
+            oobConnector = WiFiDirect(this,transportHandle as OobConnectionCallback,!(swIsController!!.isChecked))
         }
-        else {
-            oobConnector = BleClient(baseContext,  transportHandle as OobConnectionCallback, connectButton!!)
+        else if(oobMode == OOBTechnology.BLE) {
+            oobConnector = if (swIsController?.isChecked == false) {
+                BleServer(baseContext, transportHandle as OobConnectionCallback)
+            } else {
+                BleClient(baseContext,transportHandle as OobConnectionCallback,connectButton!!)
+            }
         }
         connectButton?.isEnabled=false
         disconnectButton?.isEnabled=true
@@ -278,7 +311,7 @@ open class MainActivity  : AppCompatActivity() {
 
         override fun sendData(p0: ByteArray) {
             val s = byteToHexString(p0)
-            Log.d("TransportHandle","sending Data $s")
+            Log.d("TransportHandle","sending message $s")
             oobConnector?.sendMessage(p0)
         }
 
@@ -302,7 +335,7 @@ open class MainActivity  : AppCompatActivity() {
 
         override fun messageReceived(data: ByteArray) {
             val s = byteToHexString(data)
-            Log.d("TransportHandle","message Recieved $s")
+            Log.d("TransportHandle","message Received $s")
             if(callbackExecuter!= null)
                 callbackExecuter?.run {callbackFunction?.onReceiveData(data)  }
         }
@@ -446,6 +479,12 @@ open class MainActivity  : AppCompatActivity() {
             Toast.makeText(this, "Error saving: ${e.message}", Toast.LENGTH_LONG).show()
         }
         logEntries = null
+    }
+    enum class OOBTechnology{
+        BLE,WIFI
+    }
+    enum class RangingTechnology{
+        AUTO,WIFI,BLE,UWB
     }
 
     companion object {

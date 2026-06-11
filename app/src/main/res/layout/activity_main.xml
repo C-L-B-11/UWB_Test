@@ -29,7 +29,80 @@
                 app:title="UWB_Test" />
         </com.google.android.material.appbar.AppBarLayout>
 
+        <TextView
+            android:id="@+id/tvTechnologyOOB"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_marginTop="10dp"
+            android:text="Technology for\nOOB Connection"
+            android:textSize="10pt"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/bar" />
 
+
+        <RadioGroup
+            android:id="@+id/rgTechnologyOOB"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+
+            app:layout_constraintStart_toEndOf="@+id/tvTechnologyOOB"
+            app:layout_constraintTop_toTopOf="@+id/tvTechnologyOOB" >
+
+            <RadioButton
+                android:id="@+id/rbTecOOBBLE"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                android:text="BLE" />
+            <RadioButton android:id="@+id/rbTecOOBWIFI"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="WIFI Direct"/>
+        </RadioGroup>
+
+
+        <TextView
+            android:id="@+id/tvTechnologyRanging"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_marginTop="10dp"
+            android:text="Technology for\nRanging"
+            android:textSize="10pt"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/rgTechnologyOOB" />
+
+
+        <RadioGroup
+            android:id="@+id/rgTechnologyRanging"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+
+            app:layout_constraintStart_toEndOf="@+id/tvTechnologyRanging"
+            app:layout_constraintTop_toTopOf="@+id/tvTechnologyRanging" >
+
+            <RadioButton
+                android:id="@+id/rbTecRangAUTO"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                android:text="AUTO" />
+            <RadioButton android:id="@+id/rbTecRangWIFI"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="WIFI"/>
+            <RadioButton android:id="@+id/rbTecRangBLE"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="BLE"/>
+            <RadioButton android:id="@+id/rbTecRangUWB"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="UWB"/>
+        </RadioGroup>
         <TextView
             android:id="@+id/tvIsController"
             android:layout_width="wrap_content"
@@ -39,7 +112,7 @@
             android:text="IsController"
             android:textSize="10pt"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/bar" />
+            app:layout_constraintTop_toBottomOf="@+id/rgTechnologyRanging" />
 
 
         <Switch
@@ -148,6 +221,8 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/StartMsgBtn" />
+
+
 
 
     </androidx.constraintlayout.widget.ConstraintLayout>

@@ -32,7 +32,10 @@ class BleServer(private val context : Context, private val callback : MainActivi
     private var myDevice: BluetoothDevice? = null
 
     private val sP : (ByteArray) ->Unit = {d:ByteArray -> sendFinalMessage(d)}
-    private val rM : (ByteArray) ->Unit = {d:ByteArray -> callback.messageReceived(d)}
+    private val rM : (ByteArray) ->Unit = {
+        d:ByteArray -> callback.messageReceived(d)
+        //Log.d("BLE_SERVER","message Received: ${MainActivity.byteToHexString(d)}")
+    }
     private var tcpAdapter = TPCforBLE(sP,rM,20)
 
     public val characteristic = BluetoothGattCharacteristic(
@@ -183,7 +186,10 @@ class BleServer(private val context : Context, private val callback : MainActivi
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun sendMessage(data:ByteArray) {
-        tcpAdapter.sendMessage(data)
+        //Log.d("BLE_SERVER","send message: ${MainActivity.byteToHexString(data)}")
+        if(!tcpAdapter.sendMessage(data)){
+            Log.d("BLE_Server","Sending through tcp failed")
+        }
     }
 
     override fun isInitiator(): Boolean {
@@ -210,7 +216,7 @@ class BleServer(private val context : Context, private val callback : MainActivi
         if(myDevice!=null){
             val d:BluetoothDevice = myDevice!!
             gattServer?.notifyCharacteristicChanged(d, characteristic, false, data)
-            Log.d("BLE_SERVER","sendFragment: ${MainActivity.byteToHexString(data)}")
+            //Log.d("BLE_SERVER","sendFragment: ${MainActivity.byteToHexString(data)}")
         }
     }
 
