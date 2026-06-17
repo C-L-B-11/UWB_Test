@@ -67,18 +67,6 @@ class WiFiDirect(private val contextM: Context, private val callback: MainActivi
             Log.d("WifiDirekt", "no Permission")
         }
         val options = DiscoveryOptions.Builder().setStrategy(STRATEGY).build()
-        if(options==null){
-            Log.d("WifiDirekt", "no options")
-            return
-        }
-        if(SERVICE_ID==null){
-            Log.d("WifiDirekt", "no SERVICE_ID")
-            return
-        }
-        if(endpointDiscoveryCallback==null){
-            Log.d("WifiDirekt", "no endpointDiscoveryCallback")
-            return
-        }
         if(connectionsClient==null){
             Log.d("WifiDirekt", "no connectionsClient")
             return

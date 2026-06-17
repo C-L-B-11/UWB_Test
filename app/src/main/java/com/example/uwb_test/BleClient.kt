@@ -48,6 +48,7 @@ class BleClient(private val context: Context, private val callback: MainActivity
 
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+            Log.d("BLE_CLIENT","onConnectionStateChange: $status, $newState")
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 gatt.discoverServices()
             }
@@ -55,6 +56,11 @@ class BleClient(private val context: Context, private val callback: MainActivity
                 Log.d("BLE_CLIENT","Disconnected")
                 callback.connectionClosed()
             }
+        }
+
+        override fun onServiceChanged(gatt:BluetoothGatt){
+            Log.d("BLE_CLIENT","onServiceChanged:${gatt.device.address}")
+
         }
 
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
@@ -94,7 +100,9 @@ class BleClient(private val context: Context, private val callback: MainActivity
                 REQUEST_MEASUREMENT -> callback.requestMeasuring()
                 STOP_MEASUREMENT -> callback.stopMeasuring()
                 SHARED_RESULT -> callback.sharedResult(MainActivity.byteArrayToDouble(data))
-                else -> tcpAdapter.receivedPackage(value)
+                else -> if(!tcpAdapter.receivedPackage(value)){
+                    callback.statusMessage("Communication error")
+                }
             }
         }
     }
@@ -238,6 +246,7 @@ class BleClient(private val context: Context, private val callback: MainActivity
         //Log.d("BLE_CLIENT","send message: ${MainActivity.byteToHexString(data)}")
         if(!tcpAdapter.sendMessage(data)){
             Log.d("BLE_CLIENT","Sending through tcp failed")
+            callback.statusMessage("Communication error")
         }
     }
 

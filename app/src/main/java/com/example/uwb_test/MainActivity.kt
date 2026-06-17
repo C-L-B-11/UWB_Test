@@ -23,13 +23,14 @@ import android.util.Log
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-import androidx.core.uwb.RangingCapabilities
+import androidx.core.view.size
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -56,8 +57,8 @@ const val SHARED_RESULT:Byte = 4
 open class MainActivity  : AppCompatActivity() {
 
     private var exception: TextView? = null
-
     private var tvRangeDisplay: TextView? = null
+
 
     @SuppressLint("UseSwitchCompatOrMaterialCode")
     private var swIsController: Switch? = null
@@ -65,17 +66,17 @@ open class MainActivity  : AppCompatActivity() {
     private var swMakeLog: Switch? = null
     public var connectButton: Button? = null
     private var disconnectButton: Button? = null
-
     private var startMeasuringButton: Button? = null
     private var stopMeasuringButton: Button? = null
+    private var rgTecOOB: RadioGroup? = null
+    private var rgTecRANG: RadioGroup? = null
+
 
     private var rangingManager :RangingManager? = null
-
     private var oobConnector : OobConnection? = null
-
     private var transportHandle : MyTransportHandle? = null
-
     private var rangingSession : RangingSession? = null
+
 
     private var logEntries :  ArrayList<String>? = null
 
@@ -98,8 +99,8 @@ open class MainActivity  : AppCompatActivity() {
         initUI()
         transportHandle = MyTransportHandle()
 
-        rangingManager?.registerCapabilitiesCallback(MyExecutor(),MyRangingCapabilitiesCallback())
-
+        rangingManager?.registerCapabilitiesCallback(this.mainExecutor,MyRangingCapabilitiesCallback())
+        //rangingManager?.getRangingCapabilities()
     }
 
 
@@ -116,26 +117,29 @@ open class MainActivity  : AppCompatActivity() {
         startMeasuringButton!!.setOnClickListener  { _ -> startMeasuringBtn() }
         stopMeasuringButton = findViewById<Button>(R.id.StopMsgBtn)
         stopMeasuringButton!!.setOnClickListener  { _ -> stopMeasuringBtn() }
+        rgTecOOB = findViewById<RadioGroup>(R.id.rgTechnologyOOB)
+        rgTecRANG = findViewById<RadioGroup>(R.id.rgTechnologyRanging)
 
 
-        findViewById<RadioButton>(R.id.rbTecOOBBLE).setOnCheckedChangeListener { buttonView, isChecked ->
+        findViewById<RadioButton>(R.id.rbTecOOBBLE).setOnCheckedChangeListener { _, isChecked ->
             if(isChecked)oobMode = OOBTechnology.BLE
         }
-        findViewById<RadioButton>(R.id.rbTecOOBWIFI).setOnCheckedChangeListener { buttonView, isChecked ->
+        findViewById<RadioButton>(R.id.rbTecOOBWIFI).setOnCheckedChangeListener { _, isChecked ->
             if(isChecked)oobMode = OOBTechnology.WIFI
         }
-        findViewById<RadioButton>(R.id.rbTecRangAUTO).setOnCheckedChangeListener { buttonView, isChecked ->
+        findViewById<RadioButton>(R.id.rbTecRangAUTO).setOnCheckedChangeListener { _, isChecked ->
             if(isChecked)rangingMode = RangingTechnology.AUTO
         }
-        findViewById<RadioButton>(R.id.rbTecRangWIFI).setOnCheckedChangeListener { buttonView, isChecked ->
+        findViewById<RadioButton>(R.id.rbTecRangWIFI).setOnCheckedChangeListener { _, isChecked ->
             if(isChecked)rangingMode = RangingTechnology.WIFI
         }
-        findViewById<RadioButton>(R.id.rbTecRangUWB).setOnCheckedChangeListener { buttonView, isChecked ->
+        findViewById<RadioButton>(R.id.rbTecRangUWB).setOnCheckedChangeListener { _, isChecked ->
             if(isChecked)rangingMode = RangingTechnology.UWB
         }
-        findViewById<RadioButton>(R.id.rbTecRangBLE).setOnCheckedChangeListener { buttonView, isChecked ->
+        findViewById<RadioButton>(R.id.rbTecRangBLE).setOnCheckedChangeListener { _, isChecked ->
             if(isChecked)rangingMode = RangingTechnology.BLE
         }
+
     }
 
     private fun stopMeasuringBtn()
@@ -153,7 +157,9 @@ open class MainActivity  : AppCompatActivity() {
                 stopMeasuringButton?.isEnabled = false
                 startMeasuringButton?.isEnabled = true
                 disconnectButton?.isEnabled = true
+
                 swMakeLog?.isEnabled = true
+                toggleRadioGroup(rgTecRANG!!,true)
             }
             if(swMakeLog?.isChecked == true && logEntries!=null)
             {
@@ -172,14 +178,17 @@ open class MainActivity  : AppCompatActivity() {
         }
     }
 
-    @SuppressLint("NewApi")
-    private fun startMeasuring(){
+    private fun startedMeasuring(){
         runOnUiThread {
             startMeasuringButton?.isEnabled = false
             stopMeasuringButton?.isEnabled = true
             disconnectButton?.isEnabled = false
+            toggleRadioGroup(rgTecRANG!!,false)
             swMakeLog?.isEnabled = false
         }
+    }
+    @SuppressLint("NewApi")
+    private fun startMeasuring(){
         if(!askPermissions(this, *arrayOf(Manifest.permission.BLUETOOTH_CONNECT)))
         {
             return
@@ -240,6 +249,9 @@ open class MainActivity  : AppCompatActivity() {
             connectButton?.isEnabled = true
             disconnectButton?.isEnabled = false
             startMeasuringButton?.isEnabled = false
+            swIsController?.isEnabled = true
+            toggleRadioGroup(rgTecOOB!!,true)
+            exception?.text =""
         }
     }
 
@@ -250,13 +262,15 @@ open class MainActivity  : AppCompatActivity() {
         }
         else if(oobMode == OOBTechnology.BLE) {
             oobConnector = if (swIsController?.isChecked == false) {
-                BleServer(baseContext, transportHandle as OobConnectionCallback)
+                BleServer(this, transportHandle as OobConnectionCallback)
             } else {
-                BleClient(baseContext,transportHandle as OobConnectionCallback,connectButton!!)
+                BleClient(this,transportHandle as OobConnectionCallback,connectButton!!)
             }
         }
         connectButton?.isEnabled=false
         disconnectButton?.isEnabled=true
+        swIsController?.isEnabled = false
+        toggleRadioGroup(rgTecOOB!!,false)
     }
 
     @OptIn(ExperimentalTime::class)
@@ -324,6 +338,7 @@ open class MainActivity  : AppCompatActivity() {
             Log.d("TransportHandle","connection established")
             runOnUiThread {
                 startMeasuringButton?.isEnabled=true
+
             }
         }
 
@@ -331,6 +346,7 @@ open class MainActivity  : AppCompatActivity() {
             Log.d("TransportHandle","connection closed")
             oobConnector = null
             disconnected()
+
         }
 
         override fun messageReceived(data: ByteArray) {
@@ -356,6 +372,12 @@ open class MainActivity  : AppCompatActivity() {
         override fun sharedResult(distance: Double) {
             gotResult(distance)
         }
+
+        override fun statusMessage(message: String) {
+            runOnUiThread{
+                exception?.setText(message)
+            }
+        }
     }
 
     public inner class MyRangingSessionCallback: RangingSession.Callback{
@@ -369,10 +391,14 @@ open class MainActivity  : AppCompatActivity() {
             Log.d("RangingResult","onOpenFailed: $p0")
             rangingSession = null
             stopMeasuring()
+            runOnUiThread{
+                exception?.text="Failed to start ranging"
+            }
         }
 
         override fun onOpened() {
             Log.d("RangingResult","onOpened")
+            startedMeasuring()
         }
 
         override fun onResults(p0: RangingDevice, p1: RangingData) {
@@ -426,6 +452,7 @@ open class MainActivity  : AppCompatActivity() {
         abstract fun requestMeasuring()
         abstract fun stopMeasuring()
         abstract fun sharedResult(distance: Double)
+        abstract fun statusMessage(message:String)
     }
 
     @OptIn(ExperimentalTime::class)
@@ -497,6 +524,12 @@ open class MainActivity  : AppCompatActivity() {
                     return false
             }
             return true
+        }
+
+        fun toggleRadioGroup(rg:RadioGroup,enabled:Boolean){
+            for (i in 0 until rg.size){
+                rg.getChildAt(i).isEnabled = enabled
+            }
         }
         fun byteToHexString(data:ByteArray):String{
             var s = ""

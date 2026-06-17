@@ -57,6 +57,10 @@ class BleServer(private val context : Context, private val callback : MainActivi
                 Log.d("BLE_SERVER","Connected: $device")
                 callback.connectionEstablished()
             }
+            if(newState ==BluetoothProfile.STATE_DISCONNECTED)
+            {
+                disconnect()
+            }
 
         }
 
@@ -84,7 +88,10 @@ class BleServer(private val context : Context, private val callback : MainActivi
                 REQUEST_MEASUREMENT -> callback.requestMeasuring()
                 STOP_MEASUREMENT -> callback.stopMeasuring()
                 SHARED_RESULT -> callback.sharedResult(MainActivity.byteArrayToDouble(data))
-                else -> if(!tcpAdapter.receivedPackage(value))Log.d("BLE_SERVER","tcpAdapter failed to process")
+                else -> if(!tcpAdapter.receivedPackage(value)) {
+                    Log.d("BLE_SERVER", "tcpAdapter failed to process")
+                    callback.statusMessage("Communication error")
+                }
             }
 
 
@@ -122,6 +129,7 @@ class BleServer(private val context : Context, private val callback : MainActivi
         if (!askPermissions(context, *arrayOf(Manifest.permission.BLUETOOTH_CONNECT)))
         {
             Log.d("BleServer","No Permission")
+            callback.statusMessage("No Permission")
             flag = false
         }
         if(flag) {
@@ -162,6 +170,12 @@ class BleServer(private val context : Context, private val callback : MainActivi
             callback.connectionClosed()
 
         }
+        else
+        {
+            callback.statusMessage("Devices still connected")
+            gattServer?.cancelConnection(myDevice!!)
+        }
+
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
@@ -189,6 +203,7 @@ class BleServer(private val context : Context, private val callback : MainActivi
         //Log.d("BLE_SERVER","send message: ${MainActivity.byteToHexString(data)}")
         if(!tcpAdapter.sendMessage(data)){
             Log.d("BLE_Server","Sending through tcp failed")
+            callback.statusMessage("Communication error")
         }
     }
 
@@ -216,7 +231,7 @@ class BleServer(private val context : Context, private val callback : MainActivi
         if(myDevice!=null){
             val d:BluetoothDevice = myDevice!!
             gattServer?.notifyCharacteristicChanged(d, characteristic, false, data)
-            //Log.d("BLE_SERVER","sendFragment: ${MainActivity.byteToHexString(data)}")
+            Log.d("BLE_SERVER","sendFragment: ${MainActivity.byteToHexString(data)}")
         }
     }
 
