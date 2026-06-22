@@ -20,9 +20,8 @@ import com.example.uwb_test.MainActivity.Companion.askPermissions
 
 class WiFiDirect(private val contextM: Context, private val callback: MainActivity.OobConnectionCallback,private val isHost:Boolean): MainActivity.OobConnection {
 
-    private val DATA_PACKAGE :Byte = 0b00001000
+
     private val STRATEGY = Strategy.P2P_POINT_TO_POINT
-    private val SERVICE_ID = "com.example.myapp.DATA_EXCHANGE_SERVICE"
     private var connectionsClient: ConnectionsClient? = null
     private var connectionLifecycleCallback = MyConnectionLifecycleCallback()
     private var payloadCallback = MyPayloadCallback()
@@ -64,11 +63,11 @@ class WiFiDirect(private val contextM: Context, private val callback: MainActivi
     }
     private fun startDiscovering() {
         if(!askPermissions(contextM,*arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION,android.Manifest.permission.NEARBY_WIFI_DEVICES))){
-            Log.d("WifiDirekt", "no Permission")
+            Log.d("WifiDirect", "no Permission")
         }
         val options = DiscoveryOptions.Builder().setStrategy(STRATEGY).build()
         if(connectionsClient==null){
-            Log.d("WifiDirekt", "no connectionsClient")
+            Log.d("WifiDirect", "no connectionsClient")
             return
         }
         connectionsClient?.startDiscovery(

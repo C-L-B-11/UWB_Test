@@ -47,12 +47,14 @@ import kotlin.time.ExperimentalTime
 val SERVICE_UUID: UUID = UUID.fromString("0000180D-0000-1000-8000-00805f9b34fb")
 val CHAR_UUID: UUID = UUID.fromString("00002A37-0000-1000-8000-00805f9b34fb")
 
-
+const val SERVICE_ID = "com.example.myapp.DATA_EXCHANGE_SERVICE"
 
 const val START_MEASUREMENT:Byte = 1
 const val REQUEST_MEASUREMENT:Byte = 2
 const val STOP_MEASUREMENT:Byte = 3
 const val SHARED_RESULT:Byte = 4
+const val DATA_PACKAGE :Byte = 0b00001000
+
 
 open class MainActivity  : AppCompatActivity() {
 
@@ -101,6 +103,8 @@ open class MainActivity  : AppCompatActivity() {
 
         rangingManager?.registerCapabilitiesCallback(this.mainExecutor,MyRangingCapabilitiesCallback())
         //rangingManager?.getRangingCapabilities()
+
+        //Log.d("Main",if(this.packageManager.hasSystemFeature(PackageManager.FEATURE_WIFI_AWARE)){"Yes wifi aware"} else {"No wifi aware"})
     }
 
 
@@ -124,8 +128,12 @@ open class MainActivity  : AppCompatActivity() {
         findViewById<RadioButton>(R.id.rbTecOOBBLE).setOnCheckedChangeListener { _, isChecked ->
             if(isChecked)oobMode = OOBTechnology.BLE
         }
-        findViewById<RadioButton>(R.id.rbTecOOBWIFI).setOnCheckedChangeListener { _, isChecked ->
-            if(isChecked)oobMode = OOBTechnology.WIFI
+        findViewById<RadioButton>(R.id.rbTecOOBWIFIDIRECT).setOnCheckedChangeListener { _, isChecked ->
+            if(isChecked)oobMode = OOBTechnology.WIFIDirect
+        }
+
+        findViewById<RadioButton>(R.id.rbTecOOBWIFIAWARE).setOnCheckedChangeListener { _, isChecked ->
+            if(isChecked)oobMode = OOBTechnology.WIFIAWARE
         }
         findViewById<RadioButton>(R.id.rbTecRangAUTO).setOnCheckedChangeListener { _, isChecked ->
             if(isChecked)rangingMode = RangingTechnology.AUTO
@@ -257,7 +265,7 @@ open class MainActivity  : AppCompatActivity() {
 
     private fun connect() {
 
-        if(oobMode==OOBTechnology.WIFI){
+        if(oobMode==OOBTechnology.WIFIDirect){
             oobConnector = WiFiDirect(this,transportHandle as OobConnectionCallback,!(swIsController!!.isChecked))
         }
         else if(oobMode == OOBTechnology.BLE) {
@@ -265,6 +273,13 @@ open class MainActivity  : AppCompatActivity() {
                 BleServer(this, transportHandle as OobConnectionCallback)
             } else {
                 BleClient(this,transportHandle as OobConnectionCallback,connectButton!!)
+            }
+        }
+        else if(oobMode==OOBTechnology.WIFIAWARE){
+            oobConnector = if (swIsController?.isChecked == false) {
+                WiFiAwareServer(this, transportHandle as OobConnectionCallback)
+            } else {
+                WiFiAwareClient(this,transportHandle as OobConnectionCallback)
             }
         }
         connectButton?.isEnabled=false
@@ -375,7 +390,7 @@ open class MainActivity  : AppCompatActivity() {
 
         override fun statusMessage(message: String) {
             runOnUiThread{
-                exception?.setText(message)
+                exception?.text = message
             }
         }
     }
@@ -508,7 +523,7 @@ open class MainActivity  : AppCompatActivity() {
         logEntries = null
     }
     enum class OOBTechnology{
-        BLE,WIFI
+        BLE,WIFIDirect,WIFIAWARE
     }
     enum class RangingTechnology{
         AUTO,WIFI,BLE,UWB

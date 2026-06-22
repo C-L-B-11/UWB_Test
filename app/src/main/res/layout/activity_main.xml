@@ -56,10 +56,15 @@
                 android:layout_height="wrap_content"
                 android:checked="true"
                 android:text="BLE" />
-            <RadioButton android:id="@+id/rbTecOOBWIFI"
+            <RadioButton android:id="@+id/rbTecOOBWIFIDIRECT"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="WIFI Direct"/>
+
+            <RadioButton android:id="@+id/rbTecOOBWIFIAWARE"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="WIFI Aware"/>
         </RadioGroup>
 
 
