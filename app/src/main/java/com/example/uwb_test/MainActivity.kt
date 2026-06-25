@@ -79,6 +79,8 @@ open class MainActivity  : AppCompatActivity() {
     private var transportHandle : MyTransportHandle? = null
     private var rangingSession : RangingSession? = null
 
+    private var capabilities : MyRangingCapabilitiesCallback? = null
+
 
     private var logEntries :  ArrayList<String>? = null
 
@@ -101,8 +103,9 @@ open class MainActivity  : AppCompatActivity() {
         initUI()
         transportHandle = MyTransportHandle()
 
-        rangingManager?.registerCapabilitiesCallback(this.mainExecutor,MyRangingCapabilitiesCallback())
-        //rangingManager?.getRangingCapabilities()
+        capabilities = MyRangingCapabilitiesCallback()
+
+
 
         //Log.d("Main",if(this.packageManager.hasSystemFeature(PackageManager.FEATURE_WIFI_AWARE)){"Yes wifi aware"} else {"No wifi aware"})
     }
@@ -197,7 +200,21 @@ open class MainActivity  : AppCompatActivity() {
     }
     @SuppressLint("NewApi")
     private fun startMeasuring(){
-        if(!askPermissions(this, *arrayOf(Manifest.permission.BLUETOOTH_CONNECT)))
+        val permissions = mutableListOf(Manifest.permission.BLUETOOTH_CONNECT)
+        if (rangingMode == RangingTechnology.BLE || rangingMode == RangingTechnology.AUTO) {
+            permissions.add(Manifest.permission.BLUETOOTH_ADVERTISE)
+            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
+            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        if (rangingMode == RangingTechnology.UWB || rangingMode == RangingTechnology.AUTO) {
+            permissions.add(Manifest.permission.UWB_RANGING)
+        }
+        if (rangingMode == RangingTechnology.WIFI || rangingMode == RangingTechnology.AUTO) {
+            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+            permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
+        }
+
+        if(!askPermissions(this, *permissions.toTypedArray()))
         {
             return
         }
@@ -223,13 +240,13 @@ open class MainActivity  : AppCompatActivity() {
             role= RangingPreference.DEVICE_ROLE_INITIATOR
 
             config = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).setRangingTechnologyFilter(filter).build()
-            //config = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).build()
-
         }
         else
         {
             role = RangingPreference.DEVICE_ROLE_RESPONDER
-            config = (OobResponderRangingConfig.Builder( deviceHandle).build())
+            config = OobResponderRangingConfig.Builder(deviceHandle)
+
+                .build()
         }
         val rangingPreference: RangingPreference =  RangingPreference.Builder(role, config).build()
         rangingSession?.start(rangingPreference)
@@ -355,12 +372,15 @@ open class MainActivity  : AppCompatActivity() {
                 startMeasuringButton?.isEnabled=true
 
             }
+            rangingManager?.registerCapabilitiesCallback(MyExecutor(),capabilities!!)
         }
 
         override fun connectionClosed() {
             Log.d("TransportHandle","connection closed")
+            oobConnector?.destroy()
             oobConnector = null
             disconnected()
+            rangingManager?.unregisterCapabilitiesCallback(capabilities!!)
 
         }
 
@@ -438,7 +458,16 @@ open class MainActivity  : AppCompatActivity() {
 
     public inner class MyRangingCapabilitiesCallback:RangingManager.RangingCapabilitiesCallback{
         override fun onRangingCapabilities(p0: android.ranging.RangingCapabilities) {
-            Log.d("RangingCapa",p0.toString())
+            Log.d("RangingCapa", "Capabilities: $p0")
+            val bleCsSupported = p0.csCapabilities != null
+            val uwbSupported = p0.uwbCapabilities != null
+            Log.d("RangingCapa", "BLE_CS Supported: $bleCsSupported, UWB Supported: $uwbSupported")
+            
+            if (rangingMode == RangingTechnology.BLE && !bleCsSupported) {
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "BLE CS not supported on this hardware", Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 
@@ -456,6 +485,7 @@ open class MainActivity  : AppCompatActivity() {
         abstract fun requestMeasuring()
         abstract fun stopMeasuring()
         abstract fun sharedResult(distance: Double)
+        fun destroy(){}
 
     }
 
@@ -522,6 +552,8 @@ open class MainActivity  : AppCompatActivity() {
         }
         logEntries = null
     }
+
+
     enum class OOBTechnology{
         BLE,WIFIDirect,WIFIAWARE
     }
@@ -530,15 +562,27 @@ open class MainActivity  : AppCompatActivity() {
     }
 
     companion object {
-        fun askPermissions(context: Context, vararg permissions: String):Boolean {
+        fun askPermissions(context: Context, vararg permissions: String): Boolean {
+            val activity = context as? Activity
+            var allGranted = true
+            val missingPermissions = mutableListOf<String>()
+
             for (permission in permissions) {
-                if (ActivityCompat.checkSelfPermission(context,permission) == PackageManager.PERMISSION_GRANTED)
-                    continue
-                ActivityCompat.requestPermissions(context as Activity,arrayOf(permission),1)
-                if (ActivityCompat.checkSelfPermission(context,permission) != PackageManager.PERMISSION_GRANTED)
-                    return false
+                if (ActivityCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
+                    allGranted = false
+                    missingPermissions.add(permission)
+                }
             }
-            return true
+
+            if (missingPermissions.isNotEmpty()) {
+                if (activity != null) {
+                    ActivityCompat.requestPermissions(activity, missingPermissions.toTypedArray(), 1)
+                } else {
+                    Log.e("Permissions", "Cannot request permissions from a non-Activity context: $context")
+                }
+            }
+
+            return allGranted
         }
 
         fun toggleRadioGroup(rg:RadioGroup,enabled:Boolean){

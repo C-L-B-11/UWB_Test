@@ -21,6 +21,7 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
 
     private var awareSession: WifiAwareSession? = null
     private var publishSession: PublishDiscoverySession? = null
+    private var peerHandle: PeerHandle? = null
 
     val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private var networkCallback: NetworkCallback? = null
@@ -55,11 +56,11 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
         session.publish(config,  discoverySessionCallback!!,null)
     }
 
-    private fun acceptConnection(peerHandle: PeerHandle) {
+    private fun acceptConnection(peerHandle2: PeerHandle) {
         Log.d("WifiAwareServer","Accept Connection")
 
-
-        val networkSpecifier = WifiAwareNetworkSpecifier.Builder(publishSession!!, peerHandle)
+        peerHandle = peerHandle2
+        val networkSpecifier = WifiAwareNetworkSpecifier.Builder(publishSession!!, peerHandle!!)
             .setPskPassphrase("SecurePassphrase123")
             .build()
 
@@ -67,8 +68,8 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI_AWARE)
             .setNetworkSpecifier(networkSpecifier)
             .build()
-
-        connectivityManager.requestNetwork(networkRequest, NetworkCallback())
+        networkCallback = NetworkCallback()
+        connectivityManager.requestNetwork(networkRequest, networkCallback!!)
     }
     inner class MyDiscoverySessionCallback() : DiscoverySessionCallback() {
         override fun onPublishStarted(session: PublishDiscoverySession) {
@@ -77,7 +78,7 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
         }
 
         override fun onMessageReceived(peerHandle: PeerHandle, message: ByteArray) {
-            Log.d("WiFiAwareServer","MessageFromClient: ${MainActivity.byteToHexString(message)}")
+            //Log.d("WiFiAwareServer","MessageFromClient: ${MainActivity.byteToHexString(message)}")
 
             val mode:Byte = message[0]
             val data = message.copyOfRange(1,message.size)
@@ -110,6 +111,7 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
         }
         override fun onLost(network: Network) {
             Log.d("NetworkCallbackServer","onLost")
+            stop()
             callback.connectionClosed()
         }
         override fun onReserved(networkCapabilities: NetworkCapabilities){
@@ -122,10 +124,19 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
     private fun runSocketServer(network: Network) {
         // Port 0 lets the OS assign a free port; share the port via message/OOB if needed.
         // For this example we use a fixed known port.
-        val serverSocket = ServerSocket(8888)
+        var serverSocket : ServerSocket? = null
+        try{
+            serverSocket = ServerSocket(8888)
+        }catch(e:Exception) {
+            Log.d("WiFiAwareServer","Socket creation failed:${e.message}")
+            callback.connectionClosed()
+            return
+        }
+
         Log.d("WiFiAwareServer","Listening on port 8888")
 
         val clientSocket = serverSocket.accept()
+
         Log.d("WiFiAwareServer","Client connected from ${clientSocket.inetAddress}")
         callback.connectionEstablished()
 
@@ -143,10 +154,6 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
     }
 
     fun stop() {
-        networkCallback?.let {
-            connectivityManager.unregisterNetworkCallback(it)
-            networkCallback = null
-        }
         publishSession?.close()
         awareSession?.close()
     }
@@ -184,6 +191,14 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
     }
 
     fun sendCodedMessage(mode:Byte,message:ByteArray){
+        val data = byteArrayOf(mode)+message
+        //Log.d("WifiAwareServer","Sending message: ${MainActivity.byteToHexString(data)}")
+        publishSession?.sendMessage(peerHandle!!,0,data)
+    }
 
+    override fun destroy(){
+        connectivityManager.unregisterNetworkCallback(networkCallback!!)
+        networkCallback = null
+        discoverySessionCallback = null
     }
 }

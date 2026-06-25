@@ -91,7 +91,7 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
         }
 
         override fun onMessageReceived(peerHandle: PeerHandle, message: ByteArray) {
-            Log.d("WiFiAwareClient","Message from server: ${MainActivity.byteToHexString(message)}")
+            //Log.d("WiFiAwareClient","Message from server: ${MainActivity.byteToHexString(message)}")
             val mode:Byte = message[0]
             val data = message.copyOfRange(1,message.size)
             when(mode){
@@ -131,6 +131,7 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
         }
         override fun onLost(network: Network) {
             Log.d("NetworkCallbackClient","onLost")
+            stop()
             callback.connectionClosed()
         }
         override fun onReserved(networkCapabilities: NetworkCapabilities){
@@ -138,6 +139,7 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
         }
         override fun onUnavailable() {
             Log.d("NetworkCallbackClient","onUnavailable")
+            stop()
         }
     }
 
@@ -145,8 +147,15 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
         Log.d("WiFiAwareClient","Connecting to $serverAddress:8888")
 
         // Must use network.getSocketFactory() so the socket routes over the Aware NDP
-        val socket = network.socketFactory.createSocket(serverAddress, 8888) as Socket
-
+        var socket: Socket? = null
+        try {
+            socket = network.socketFactory.createSocket(serverAddress, 8888) as Socket
+        }
+        catch (e:Exception){
+            Log.d("WiFiAwareClient","Socket creation failed:${e.message}")
+            callback.connectionClosed()
+            return
+        }
         callback.connectionEstablished()
         val writer = socket.getOutputStream()
         val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
@@ -161,10 +170,7 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
     }
 
     fun stop() {
-        networkCallback?.let {
-            connectivityManager.unregisterNetworkCallback(it)
-            networkCallback = null
-        }
+
         subscribeSession?.close()
         awareSession?.close()
     }
@@ -199,6 +205,16 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
     }
 
     fun sendCodedMessage(mode:Byte,message:ByteArray){
+        val data = byteArrayOf(mode)+message
+        //Log.d("WifiAwareClient","Sending message: ${MainActivity.byteToHexString(data)}")
+        subscribeSession?.sendMessage(serverPeerHandle!!,0,data)
 
+    }
+    override fun destroy(){
+        connectivityManager.unregisterNetworkCallback(networkCallback!!)
+        subscribeSession=null
+        serverPeerHandle=null
+        networkCallback = null
+        discoverySessionCallback = null
     }
 }
