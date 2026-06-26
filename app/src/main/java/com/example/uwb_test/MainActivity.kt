@@ -4,6 +4,8 @@ package com.example.uwb_test
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -15,10 +17,15 @@ import android.ranging.RangingDevice
 import android.ranging.RangingManager
 import android.ranging.RangingPreference
 import android.ranging.RangingSession
+import android.ranging.ble.cs.BleCsRangingCapabilities
+import android.ranging.ble.cs.BleCsRangingParams
 import android.ranging.oob.DeviceHandle
 import android.ranging.oob.OobInitiatorRangingConfig
 import android.ranging.oob.OobResponderRangingConfig
 import android.ranging.oob.TransportHandle
+import android.ranging.raw.RawInitiatorRangingConfig
+import android.ranging.raw.RawRangingDevice
+import android.ranging.raw.RawResponderRangingConfig
 import android.util.Log
 import android.view.WindowManager
 import android.widget.Button
@@ -28,6 +35,7 @@ import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContract
+import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.view.size
@@ -44,6 +52,8 @@ import kotlin.experimental.and
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
+
+const val IS_RAW_MODE : Boolean = true
 val SERVICE_UUID: UUID = UUID.fromString("0000180D-0000-1000-8000-00805f9b34fb")
 val CHAR_UUID: UUID = UUID.fromString("00002A37-0000-1000-8000-00805f9b34fb")
 
@@ -198,8 +208,75 @@ open class MainActivity  : AppCompatActivity() {
             swMakeLog?.isEnabled = false
         }
     }
-    @SuppressLint("NewApi")
+
+    @SuppressLint("NewApi", "MissingPermission")
     private fun startMeasuring(){
+
+
+        if(!IS_RAW_MODE) {
+            val permissions = mutableListOf(Manifest.permission.BLUETOOTH_CONNECT)
+            if (rangingMode == RangingTechnology.BLE || rangingMode == RangingTechnology.AUTO) {
+                permissions.add(Manifest.permission.BLUETOOTH_ADVERTISE)
+                permissions.add(Manifest.permission.BLUETOOTH_SCAN)
+                permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+            }
+            if (rangingMode == RangingTechnology.UWB || rangingMode == RangingTechnology.AUTO) {
+                permissions.add(Manifest.permission.UWB_RANGING)
+            }
+            if (rangingMode == RangingTechnology.WIFI || rangingMode == RangingTechnology.AUTO) {
+                permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+                permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
+            }
+
+            if(!askPermissions(this, *permissions.toTypedArray()))
+            {
+                return
+            }
+
+
+            val myRangingSessionCallback = MyRangingSessionCallback()
+            val myExecutor = MyExecutor()
+            rangingSession = rangingManager?.createRangingSession(myExecutor, myRangingSessionCallback)
+            var role: Int
+            var config: RangingConfig
+
+            val rangingDevice = RangingDevice.Builder().build()
+
+            val deviceHandle: DeviceHandle = DeviceHandle.Builder(rangingDevice, transportHandle!!)
+                .build()
+            val filter: Set<Int> = when (rangingMode) {
+                RangingTechnology.BLE -> setOf(RangingManager.BLE_CS)
+                RangingTechnology.WIFI -> setOf(RangingManager.WIFI_NAN_RTT)
+                RangingTechnology.UWB -> setOf(RangingManager.UWB)
+                else -> setOf(
+                    RangingManager.BLE_CS,
+                    RangingManager.WIFI_NAN_RTT,
+                    RangingManager.UWB,
+                )
+            }
+
+
+            if (swIsController?.isChecked == true) {
+                role = RangingPreference.DEVICE_ROLE_INITIATOR
+
+                config = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).setRangingTechnologyFilter(filter).build()
+                //config = RawInitiatorRangingConfig.Builder().addRawRangingDevice(rawDevice).build()
+
+            } else {
+                role = RangingPreference.DEVICE_ROLE_RESPONDER
+                config = OobResponderRangingConfig.Builder(deviceHandle).build()
+                //config = RawResponderRangingConfig.Builder().setRawRangingDevice(rawDevice).build()
+
+            }
+            startMeasuring2(config,role)
+        }
+        else{
+            val address = (this.getSystemService(BLUETOOTH_SERVICE) as BluetoothManager).getAdapter().getAddress()
+            Log.d("RawRanging","Share Address: $address; ${address.toByteArray()}")
+            transportHandle?.sendData(address.toByteArray())
+        }
+    }
+    private fun gotDeviceInfo(data:ByteArray){
         val permissions = mutableListOf(Manifest.permission.BLUETOOTH_CONNECT)
         if (rangingMode == RangingTechnology.BLE || rangingMode == RangingTechnology.AUTO) {
             permissions.add(Manifest.permission.BLUETOOTH_ADVERTISE)
@@ -223,36 +300,47 @@ open class MainActivity  : AppCompatActivity() {
         val myRangingSessionCallback = MyRangingSessionCallback()
         val myExecutor = MyExecutor()
         rangingSession = rangingManager?.createRangingSession(myExecutor, myRangingSessionCallback)
+
+        val address :String = data.decodeToString()
+        Log.d("RawRanging","Recieved Address: $address; $data")
+        if(!BluetoothAdapter.checkBluetoothAddress(address)){
+            return
+        }
         var role: Int
-        var config : RangingConfig
-
-        val rangingDevice = RangingDevice.Builder().build()
-
-        val deviceHandle: DeviceHandle = DeviceHandle.Builder(rangingDevice,transportHandle!!)
+        var config: RangingConfig
+        val rangingDevice: RangingDevice = RangingDevice.Builder().build()
+        val BLECSParams = BleCsRangingParams.Builder(address)
+            .setLocationType(BleCsRangingParams.LOCATION_TYPE_INDOOR)
+            .setRangingUpdateRate(RawRangingDevice.UPDATE_RATE_NORMAL)
+            .setSecurityLevel(BleCsRangingCapabilities.CS_SECURITY_LEVEL_ONE)
+            .setSightType(BleCsRangingParams.SIGHT_TYPE_LINE_OF_SIGHT)
             .build()
-        val filter: Set<Int> = when(rangingMode){
-            RangingTechnology.BLE -> setOf(RangingManager.BLE_CS)
-            RangingTechnology.WIFI -> setOf(RangingManager.WIFI_NAN_RTT)
-            RangingTechnology.UWB -> setOf(RangingManager.UWB)
-            else -> setOf(RangingManager.BLE_CS,RangingManager.WIFI_NAN_RTT,RangingManager.UWB,)
-        }
-        if(swIsController?.isChecked == true) {
-            role= RangingPreference.DEVICE_ROLE_INITIATOR
 
-            config = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).setRangingTechnologyFilter(filter).build()
-        }
-        else
-        {
+        val rawDevice = RawRangingDevice.Builder().setCsRangingParams(BLECSParams).setRangingDevice(rangingDevice).build()
+
+        if (swIsController?.isChecked == true) {
+            role = RangingPreference.DEVICE_ROLE_INITIATOR
+            config = RawInitiatorRangingConfig.Builder().addRawRangingDevice(rawDevice).build()
+            Log.d("rawRanging","I AM INITIATOR")
+
+        } else {
             role = RangingPreference.DEVICE_ROLE_RESPONDER
-            config = OobResponderRangingConfig.Builder(deviceHandle)
-
-                .build()
+            config = RawResponderRangingConfig.Builder().setRawRangingDevice(rawDevice).build()
+            Log.d("rawRanging","I AM RESPONDER")
         }
+        startMeasuring2(config,role)
+    }
+
+    private fun startMeasuring2(config : RangingConfig,role :Int){
         val rangingPreference: RangingPreference =  RangingPreference.Builder(role, config).build()
         rangingSession?.start(rangingPreference)
-
-        if(swIsController?.isChecked == false)
-            oobConnector?.startMeasuring()
+        if(IS_RAW_MODE){
+            if(swIsController?.isChecked == true)
+                startMeasuring()
+        }
+        else
+            if(swIsController?.isChecked == false)//normaly false in case of only OOB
+                oobConnector?.startMeasuring()
         if(swMakeLog?.isChecked == true){
             logEntries = ArrayList<String>()
         }
@@ -387,8 +475,14 @@ open class MainActivity  : AppCompatActivity() {
         override fun messageReceived(data: ByteArray) {
             val s = byteToHexString(data)
             Log.d("TransportHandle","message Received $s")
-            if(callbackExecuter!= null)
-                callbackExecuter?.run {callbackFunction?.onReceiveData(data)  }
+            if(!IS_RAW_MODE){
+                if(callbackExecuter!= null)
+                    callbackExecuter?.run {callbackFunction?.onReceiveData(data)  }
+            }
+            else{
+                gotDeviceInfo(data)
+            }
+
         }
 
         override fun startMeasuringOrder() {
@@ -459,7 +553,7 @@ open class MainActivity  : AppCompatActivity() {
     public inner class MyRangingCapabilitiesCallback:RangingManager.RangingCapabilitiesCallback{
         override fun onRangingCapabilities(p0: android.ranging.RangingCapabilities) {
             Log.d("RangingCapa", "Capabilities: $p0")
-            val bleCsSupported = p0.csCapabilities != null
+            /*val bleCsSupported = p0.csCapabilities != null
             val uwbSupported = p0.uwbCapabilities != null
             Log.d("RangingCapa", "BLE_CS Supported: $bleCsSupported, UWB Supported: $uwbSupported")
             
@@ -467,7 +561,7 @@ open class MainActivity  : AppCompatActivity() {
                 runOnUiThread {
                     Toast.makeText(this@MainActivity, "BLE CS not supported on this hardware", Toast.LENGTH_LONG).show()
                 }
-            }
+            }*/
         }
     }
 
@@ -566,7 +660,8 @@ open class MainActivity  : AppCompatActivity() {
             val activity = context as? Activity
             var allGranted = true
             val missingPermissions = mutableListOf<String>()
-
+            //Log.d("Permissions","Checking permissions: ${permissions.joinToString()}")
+            if(permissions.isEmpty())return true
             for (permission in permissions) {
                 if (ActivityCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
                     allGranted = false
