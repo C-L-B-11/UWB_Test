@@ -27,8 +27,10 @@ import java.util.Collections
 import java.util.Dictionary
 
 
+
+
 @SuppressLint("MissingPermission")
-class BleClient(private val context: Context, private val callback: MainActivity.OobConnectionCallback, private val view: View):MainActivity.OobConnection {
+class BleClient(private val context: Context, private val callback: MainActivity.OobConnectionCallback, private val view: View):BLESuper {
 
     private val bluetoothManager =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -277,5 +279,13 @@ class BleClient(private val context: Context, private val callback: MainActivity
         //Log.d("BLE_CLIENT","sendFragment: ${MainActivity.byteToHexString(data)}")
 
         bluetoothGatt?.writeCharacteristic(characteristic, data, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+    }
+
+    override fun getAddress(): String? {
+        if(bluetoothGatt!=null){
+            return bluetoothGatt?.device?.address
+        }
+        return null
+
     }
 }

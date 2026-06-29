@@ -24,7 +24,7 @@ import com.example.uwb_test.MainActivity.Companion.askPermissions
 
 
 @SuppressLint("MissingPermission")
-class BleServer(private val context : Context, private val callback : MainActivity.OobConnectionCallback): MainActivity.OobConnection {
+class BleServer(private val context : Context, private val callback : MainActivity.OobConnectionCallback): BLESuper {
 
     private val bluetoothManager =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -233,6 +233,13 @@ class BleServer(private val context : Context, private val callback : MainActivi
             gattServer?.notifyCharacteristicChanged(d, characteristic, false, data)
             Log.d("BLE_SERVER","sendFragment: ${MainActivity.byteToHexString(data)}")
         }
+    }
+
+    override fun getAddress() :String?{
+        if(myDevice!=null){
+            return myDevice?.address
+        }
+        return null
     }
 
 }

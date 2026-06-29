@@ -5,7 +5,6 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -35,7 +34,6 @@ import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContract
-import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.view.size
@@ -53,7 +51,7 @@ import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 
-const val IS_RAW_MODE : Boolean = true
+
 val SERVICE_UUID: UUID = UUID.fromString("0000180D-0000-1000-8000-00805f9b34fb")
 val CHAR_UUID: UUID = UUID.fromString("00002A37-0000-1000-8000-00805f9b34fb")
 
@@ -160,6 +158,9 @@ open class MainActivity  : AppCompatActivity() {
         findViewById<RadioButton>(R.id.rbTecRangBLE).setOnCheckedChangeListener { _, isChecked ->
             if(isChecked)rangingMode = RangingTechnology.BLE
         }
+        findViewById<RadioButton>(R.id.rbTecRangBLERAW).setOnCheckedChangeListener { _, isChecked ->
+            if(isChecked)rangingMode = RangingTechnology.BLE_RAW
+        }
 
     }
 
@@ -213,7 +214,7 @@ open class MainActivity  : AppCompatActivity() {
     private fun startMeasuring(){
 
 
-        if(!IS_RAW_MODE) {
+        if(rangingMode != RangingTechnology.BLE_RAW) {
             val permissions = mutableListOf(Manifest.permission.BLUETOOTH_CONNECT)
             if (rangingMode == RangingTechnology.BLE || rangingMode == RangingTechnology.AUTO) {
                 permissions.add(Manifest.permission.BLUETOOTH_ADVERTISE)
@@ -271,25 +272,24 @@ open class MainActivity  : AppCompatActivity() {
             startMeasuring2(config,role)
         }
         else{
-            val address = (this.getSystemService(BLUETOOTH_SERVICE) as BluetoothManager).getAdapter().getAddress()
-            Log.d("RawRanging","Share Address: $address; ${address.toByteArray()}")
-            transportHandle?.sendData(address.toByteArray())
+            try{
+                val address = (oobConnector as BLESuper).getAddress()
+                //Log.d("RawRanging","Other Address: $address; ${address?.toByteArray()}")
+                startRawSessionForAddress(address!!.toByteArray())
+            }
+            catch(e:Exception){
+                runOnUiThread{
+                    exception?.text = "No BLE device found"
+                }
+            }
         }
     }
-    private fun gotDeviceInfo(data:ByteArray){
+    private fun startRawSessionForAddress(data:ByteArray){
         val permissions = mutableListOf(Manifest.permission.BLUETOOTH_CONNECT)
-        if (rangingMode == RangingTechnology.BLE || rangingMode == RangingTechnology.AUTO) {
-            permissions.add(Manifest.permission.BLUETOOTH_ADVERTISE)
-            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
-            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
-        if (rangingMode == RangingTechnology.UWB || rangingMode == RangingTechnology.AUTO) {
-            permissions.add(Manifest.permission.UWB_RANGING)
-        }
-        if (rangingMode == RangingTechnology.WIFI || rangingMode == RangingTechnology.AUTO) {
-            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
-            permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
-        }
+        permissions.add(Manifest.permission.BLUETOOTH_ADVERTISE)
+        permissions.add(Manifest.permission.BLUETOOTH_SCAN)
+        permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+
 
         if(!askPermissions(this, *permissions.toTypedArray()))
         {
@@ -334,13 +334,16 @@ open class MainActivity  : AppCompatActivity() {
     private fun startMeasuring2(config : RangingConfig,role :Int){
         val rangingPreference: RangingPreference =  RangingPreference.Builder(role, config).build()
         rangingSession?.start(rangingPreference)
-        if(IS_RAW_MODE){
+        /*if(IS_RAW_MODE){
             if(swIsController?.isChecked == true)
                 startMeasuring()
         }
-        else
-            if(swIsController?.isChecked == false)//normaly false in case of only OOB
-                oobConnector?.startMeasuring()
+        else*/
+        if(swIsController?.isChecked == false)//normaly false in case of only OOB
+        {
+            oobConnector?.startMeasuring()
+        }
+
         if(swMakeLog?.isChecked == true){
             logEntries = ArrayList<String>()
         }
@@ -362,6 +365,7 @@ open class MainActivity  : AppCompatActivity() {
             connectButton?.isEnabled = true
             disconnectButton?.isEnabled = false
             startMeasuringButton?.isEnabled = false
+            stopMeasuringButton?.isEnabled = false
             swIsController?.isEnabled = true
             toggleRadioGroup(rgTecOOB!!,true)
             exception?.text =""
@@ -465,6 +469,7 @@ open class MainActivity  : AppCompatActivity() {
 
         override fun connectionClosed() {
             Log.d("TransportHandle","connection closed")
+            rangingSession?.close()
             oobConnector?.destroy()
             oobConnector = null
             disconnected()
@@ -475,14 +480,8 @@ open class MainActivity  : AppCompatActivity() {
         override fun messageReceived(data: ByteArray) {
             val s = byteToHexString(data)
             Log.d("TransportHandle","message Received $s")
-            if(!IS_RAW_MODE){
-                if(callbackExecuter!= null)
-                    callbackExecuter?.run {callbackFunction?.onReceiveData(data)  }
-            }
-            else{
-                gotDeviceInfo(data)
-            }
-
+            if(callbackExecuter!= null)
+                callbackExecuter?.run {callbackFunction?.onReceiveData(data)  }
         }
 
         override fun startMeasuringOrder() {
@@ -627,7 +626,9 @@ open class MainActivity  : AppCompatActivity() {
 
 
     fun onFileSaveCancelled() {
-        Toast.makeText(this, "Save cancelled.", Toast.LENGTH_SHORT).show()
+        runOnUiThread {
+            Toast.makeText(this, "Save cancelled.", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun writeContentToUri(uri: Uri) {
@@ -640,9 +641,9 @@ open class MainActivity  : AppCompatActivity() {
                 }
                 outputStream.write(fileText.toByteArray())
             }
-            Toast.makeText(this, "File saved!", Toast.LENGTH_SHORT).show()
+            runOnUiThread{Toast.makeText(this, "File saved!", Toast.LENGTH_SHORT).show()}
         } catch (e: Exception) {
-            Toast.makeText(this, "Error saving: ${e.message}", Toast.LENGTH_LONG).show()
+            runOnUiThread{Toast.makeText(this, "Error saving: ${e.message}", Toast.LENGTH_LONG).show()}
         }
         logEntries = null
     }
@@ -652,7 +653,7 @@ open class MainActivity  : AppCompatActivity() {
         BLE,WIFIDirect,WIFIAWARE
     }
     enum class RangingTechnology{
-        AUTO,WIFI,BLE,UWB
+        AUTO,WIFI,BLE,UWB,BLE_RAW
     }
 
     companion object {

@@ -103,6 +103,10 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="BLE"/>
+            <RadioButton android:id="@+id/rbTecRangBLERAW"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="BLE RAW"/>
             <RadioButton android:id="@+id/rbTecRangUWB"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
