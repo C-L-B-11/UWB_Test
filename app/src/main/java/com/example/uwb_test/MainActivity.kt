@@ -87,7 +87,8 @@ open class MainActivity  : AppCompatActivity() {
     private var transportHandle : MyTransportHandle? = null
     private var rangingSession : RangingSession? = null
 
-    private var capabilities : MyRangingCapabilitiesCallback? = null
+    private var capabilitiesCallback : MyRangingCapabilitiesCallback? = null
+    private val availableCapabilities = MyRangingCapabilities()
 
 
     private var logEntries :  ArrayList<String>? = null
@@ -111,7 +112,7 @@ open class MainActivity  : AppCompatActivity() {
         initUI()
         transportHandle = MyTransportHandle()
 
-        capabilities = MyRangingCapabilitiesCallback()
+        capabilitiesCallback = MyRangingCapabilitiesCallback()
 
 
 
@@ -188,7 +189,6 @@ open class MainActivity  : AppCompatActivity() {
                 safeLog()
             }
         }
-
     }
 
     private fun startMeasuringBtn(){
@@ -212,19 +212,17 @@ open class MainActivity  : AppCompatActivity() {
 
     @SuppressLint("NewApi", "MissingPermission")
     private fun startMeasuring(){
-
-
         if(rangingMode != RangingTechnology.BLE_RAW) {
             val permissions = mutableListOf(Manifest.permission.BLUETOOTH_CONNECT)
-            if (rangingMode == RangingTechnology.BLE || rangingMode == RangingTechnology.AUTO) {
+            if ((rangingMode == RangingTechnology.BLE || rangingMode == RangingTechnology.AUTO) && availableCapabilities.BLE_CS) {
                 permissions.add(Manifest.permission.BLUETOOTH_ADVERTISE)
                 permissions.add(Manifest.permission.BLUETOOTH_SCAN)
                 permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
             }
-            if (rangingMode == RangingTechnology.UWB || rangingMode == RangingTechnology.AUTO) {
+            if ((rangingMode == RangingTechnology.UWB || rangingMode == RangingTechnology.AUTO) && availableCapabilities.UWB) {
                 permissions.add(Manifest.permission.UWB_RANGING)
             }
-            if (rangingMode == RangingTechnology.WIFI || rangingMode == RangingTechnology.AUTO) {
+            if ((rangingMode == RangingTechnology.WIFI || rangingMode == RangingTechnology.AUTO) && availableCapabilities.WIFI_RTT) {
                 permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
                 permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
             }
@@ -233,7 +231,6 @@ open class MainActivity  : AppCompatActivity() {
             {
                 return
             }
-
 
             val myRangingSessionCallback = MyRangingSessionCallback()
             val myExecutor = MyExecutor()
@@ -259,15 +256,11 @@ open class MainActivity  : AppCompatActivity() {
 
             if (swIsController?.isChecked == true) {
                 role = RangingPreference.DEVICE_ROLE_INITIATOR
-
                 config = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).setRangingTechnologyFilter(filter).build()
-                //config = RawInitiatorRangingConfig.Builder().addRawRangingDevice(rawDevice).build()
 
             } else {
                 role = RangingPreference.DEVICE_ROLE_RESPONDER
                 config = OobResponderRangingConfig.Builder(deviceHandle).build()
-                //config = RawResponderRangingConfig.Builder().setRawRangingDevice(rawDevice).build()
-
             }
             startMeasuring2(config,role)
         }
@@ -332,6 +325,9 @@ open class MainActivity  : AppCompatActivity() {
     }
 
     private fun startMeasuring2(config : RangingConfig,role :Int){
+        runOnUiThread {
+            tvRangeDisplay?.text = "0.000m"
+        }
         val rangingPreference: RangingPreference =  RangingPreference.Builder(role, config).build()
         rangingSession?.start(rangingPreference)
         /*if(IS_RAW_MODE){
@@ -464,7 +460,7 @@ open class MainActivity  : AppCompatActivity() {
                 startMeasuringButton?.isEnabled=true
 
             }
-            rangingManager?.registerCapabilitiesCallback(MyExecutor(),capabilities!!)
+            rangingManager?.registerCapabilitiesCallback(MyExecutor(),capabilitiesCallback!!)
         }
 
         override fun connectionClosed() {
@@ -473,7 +469,7 @@ open class MainActivity  : AppCompatActivity() {
             oobConnector?.destroy()
             oobConnector = null
             disconnected()
-            rangingManager?.unregisterCapabilitiesCallback(capabilities!!)
+            rangingManager?.unregisterCapabilitiesCallback(capabilitiesCallback!!)
 
         }
 
@@ -552,6 +548,9 @@ open class MainActivity  : AppCompatActivity() {
     public inner class MyRangingCapabilitiesCallback:RangingManager.RangingCapabilitiesCallback{
         override fun onRangingCapabilities(p0: android.ranging.RangingCapabilities) {
             Log.d("RangingCapa", "Capabilities: $p0")
+            availableCapabilities.BLE_CS = p0.csCapabilities != null
+            availableCapabilities.UWB = p0.uwbCapabilities != null
+            availableCapabilities.WIFI_RTT = p0.rttRangingCapabilities != null
             /*val bleCsSupported = p0.csCapabilities != null
             val uwbSupported = p0.uwbCapabilities != null
             Log.d("RangingCapa", "BLE_CS Supported: $bleCsSupported, UWB Supported: $uwbSupported")
@@ -562,6 +561,13 @@ open class MainActivity  : AppCompatActivity() {
                 }
             }*/
         }
+    }
+    public inner class MyRangingCapabilities{
+        var BLE_CS:Boolean = false
+        //var BLE_RSSI:Boolean = false
+        var UWB:Boolean = false
+        var WIFI_RTT:Boolean = false
+        //var WIFI_PD :Boolean = false
     }
 
     public class MyExecutor : Executor {
@@ -661,7 +667,7 @@ open class MainActivity  : AppCompatActivity() {
             val activity = context as? Activity
             var allGranted = true
             val missingPermissions = mutableListOf<String>()
-            //Log.d("Permissions","Checking permissions: ${permissions.joinToString()}")
+            Log.d("Permissions","Checking permissions: ${permissions.joinToString()}")
             if(permissions.isEmpty())return true
             for (permission in permissions) {
                 if (ActivityCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
@@ -672,9 +678,17 @@ open class MainActivity  : AppCompatActivity() {
 
             if (missingPermissions.isNotEmpty()) {
                 if (activity != null) {
+                    Log.d("Permissions","Asking permissions: ${missingPermissions.joinToString()}")
                     ActivityCompat.requestPermissions(activity, missingPermissions.toTypedArray(), 1)
                 } else {
                     Log.e("Permissions", "Cannot request permissions from a non-Activity context: $context")
+                }
+            }
+            allGranted = true
+            for (permission in missingPermissions) {
+                if (ActivityCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
+                    allGranted = false
+
                 }
             }
 
