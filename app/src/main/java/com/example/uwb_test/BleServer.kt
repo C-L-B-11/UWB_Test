@@ -21,6 +21,7 @@ import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
 import com.example.uwb_test.MainActivity.Companion.askPermissions
+import com.example.uwb_test.MainActivity.RangingTechnology
 
 
 @SuppressLint("MissingPermission")
@@ -84,8 +85,8 @@ class BleServer(private val context : Context, private val callback : MainActivi
                 gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
             }
             when(mode){
-                START_MEASUREMENT -> callback.startMeasuringOrder()
-                REQUEST_MEASUREMENT -> callback.requestMeasuring()
+                START_MEASUREMENT -> callback.startMeasuringOrder(RangingTechnology.entries[data[0].toInt()])
+                REQUEST_MEASUREMENT -> callback.requestMeasuring(RangingTechnology.entries[data[0].toInt()])
                 STOP_MEASUREMENT -> callback.stopMeasuring()
                 SHARED_RESULT -> callback.sharedResult(MainActivity.byteArrayToDouble(data))
                 else -> if(!tcpAdapter.receivedPackage(value)) {
@@ -179,13 +180,13 @@ class BleServer(private val context : Context, private val callback : MainActivi
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    override fun startMeasuring() {
-        sendCodedMessage(START_MEASUREMENT,ByteArray(0))
+    override fun startMeasuring(mode:RangingTechnology) {
+        sendCodedMessage(START_MEASUREMENT,byteArrayOf(mode.ordinal.toByte()))
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    override fun requestMeasuring() {
-        sendCodedMessage(REQUEST_MEASUREMENT,ByteArray(0))
+    override fun requestMeasuring(mode: MainActivity.RangingTechnology) {
+        sendCodedMessage(REQUEST_MEASUREMENT,byteArrayOf(mode.ordinal.toByte()))
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
@@ -231,7 +232,7 @@ class BleServer(private val context : Context, private val callback : MainActivi
         if(myDevice!=null){
             val d:BluetoothDevice = myDevice!!
             gattServer?.notifyCharacteristicChanged(d, characteristic, false, data)
-            Log.d("BLE_SERVER","sendFragment: ${MainActivity.byteToHexString(data)}")
+            //Log.d("BLE_SERVER","sendFragment: ${MainActivity.byteToHexString(data)}")
         }
     }
 

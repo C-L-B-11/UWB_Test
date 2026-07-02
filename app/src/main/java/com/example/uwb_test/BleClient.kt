@@ -23,6 +23,7 @@ import android.widget.PopupMenu
 import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
 import com.example.uwb_test.MainActivity.Companion.askPermissions
+import com.example.uwb_test.MainActivity.RangingTechnology
 import java.util.Collections
 import java.util.Dictionary
 
@@ -98,8 +99,8 @@ class BleClient(private val context: Context, private val callback: MainActivity
             val mode:Byte = value[0]
             var data = value.copyOfRange(1,value.size)
             when(mode){
-                START_MEASUREMENT -> callback.startMeasuringOrder()
-                REQUEST_MEASUREMENT -> callback.requestMeasuring()
+                START_MEASUREMENT -> callback.startMeasuringOrder(RangingTechnology.entries[data[0].toInt()])
+                REQUEST_MEASUREMENT -> callback.requestMeasuring(RangingTechnology.entries[data[0].toInt()])
                 STOP_MEASUREMENT -> callback.stopMeasuring()
                 SHARED_RESULT -> callback.sharedResult(MainActivity.byteArrayToDouble(data))
                 else -> if(!tcpAdapter.receivedPackage(value)){
@@ -174,13 +175,13 @@ class BleClient(private val context: Context, private val callback: MainActivity
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    override fun startMeasuring() {
-        sendCodedMessage(START_MEASUREMENT,ByteArray(0))
+    override fun startMeasuring(mode:RangingTechnology) {
+        sendCodedMessage(START_MEASUREMENT,byteArrayOf(mode.ordinal.toByte()))
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    override fun requestMeasuring() {
-        sendCodedMessage(REQUEST_MEASUREMENT,ByteArray(0))
+    override fun requestMeasuring(mode:RangingTechnology) {
+        sendCodedMessage(REQUEST_MEASUREMENT,byteArrayOf(mode.ordinal.toByte()))
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)

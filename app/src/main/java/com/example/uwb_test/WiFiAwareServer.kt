@@ -13,6 +13,7 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.ServerSocket
 import android.util.Log
+import com.example.uwb_test.MainActivity.RangingTechnology
 import java.net.InetAddress
 
 class WiFiAwareServer(private val context: Context, private val callback: MainActivity.OobConnectionCallback) : MainActivity.OobConnection{
@@ -86,8 +87,8 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
                 0.toByte() ->{acceptConnection(peerHandle)
 
                     publishSession?.sendMessage(peerHandle, 0,byteArrayOf(0))}
-                START_MEASUREMENT -> callback.startMeasuringOrder()
-                REQUEST_MEASUREMENT -> callback.requestMeasuring()
+                START_MEASUREMENT -> callback.startMeasuringOrder(RangingTechnology.entries[data[0].toInt()])
+                REQUEST_MEASUREMENT -> callback.requestMeasuring(RangingTechnology.entries[data[0].toInt()])
                 STOP_MEASUREMENT -> callback.stopMeasuring()
                 SHARED_RESULT -> callback.sharedResult(MainActivity.byteArrayToDouble(data))
                 DATA_PACKAGE -> {callback.messageReceived(data)}
@@ -171,13 +172,13 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
     }
 
 
-    override fun startMeasuring() {
-        sendCodedMessage(START_MEASUREMENT,ByteArray(0))
+    override fun startMeasuring(mode:RangingTechnology) {
+        sendCodedMessage(START_MEASUREMENT,byteArrayOf(mode.ordinal.toByte()))
     }
 
 
-    override fun requestMeasuring() {
-        sendCodedMessage(REQUEST_MEASUREMENT,ByteArray(0))
+    override fun requestMeasuring(mode:RangingTechnology) {
+        sendCodedMessage(REQUEST_MEASUREMENT,byteArrayOf(mode.ordinal.toByte()))
     }
 
 

@@ -66,10 +66,11 @@ const val DATA_PACKAGE :Byte = 0b00001000
 
 open class MainActivity  : AppCompatActivity() {
 
+    /**
+     * Diverse UI referenzen
+     */
     private var exception: TextView? = null
     private var tvRangeDisplay: TextView? = null
-
-
     @SuppressLint("UseSwitchCompatOrMaterialCode")
     private var swIsController: Switch? = null
     @SuppressLint("UseSwitchCompatOrMaterialCode")
@@ -81,29 +82,65 @@ open class MainActivity  : AppCompatActivity() {
     private var rgTecOOB: RadioGroup? = null
     private var rgTecRANG: RadioGroup? = null
 
-
-    private var rangingManager :RangingManager? = null
+    /**
+    *   Objekt das die OOB Verbindung zum anderen gerät steuert und unterhält
+    */
     private var oobConnector : OobConnection? = null
+
+    /**
+     * Schnittstelle zwischen oobConnector, UI und Ranging aufbau
+     */
     private var transportHandle : MyTransportHandle? = null
+
+    /**
+     * Referenz auf das Context Objekt
+     */
+    private var rangingManager :RangingManager? = null
+
+    /**
+     *  unterhält/steuert das Ranging
+     */
     private var rangingSession : RangingSession? = null
 
+    /**
+     * Callback für die Ranging Capabilities
+     */
     private var capabilitiesCallback : MyRangingCapabilitiesCallback? = null
+
+    /**
+     * Speichert die letzten Ranging Capabilities
+     */
     private val availableCapabilities = MyRangingCapabilities()
 
 
+    /**
+     * Speichert ereignisse für die Log Datei
+     */
     private var logEntries :  ArrayList<String>? = null
 
 
+    /**
+     * steuert die Art der OOB Verbindung, wird durch UI gesetzt
+     */
     private var oobMode = OOBTechnology.BLE
+
+    /**
+     * steuert die Art der Ranging Verbindung, wird durch UI oder Partnergerät gesetzt
+     */
     private var rangingMode = RangingTechnology.AUTO
 
+    /**
+     * Activity Result Handler für die Log Datei
+     */
     private val saveLauncher = registerForActivityResult(SaveFileContract()) { uri: Uri? ->
         if (uri != null) writeContentToUri(uri)
         else             onFileSaveCancelled()
     }
 
 
-
+    /**
+     * intialisierungen
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -119,7 +156,9 @@ open class MainActivity  : AppCompatActivity() {
         //Log.d("Main",if(this.packageManager.hasSystemFeature(PackageManager.FEATURE_WIFI_AWARE)){"Yes wifi aware"} else {"No wifi aware"})
     }
 
-
+    /**
+     * initalisierungen für die UI Referenzen und setzen der Button funktionen
+     */
     private fun initUI() {
         tvRangeDisplay = findViewById<TextView>(R.id.rangeDisplay)
         swIsController = findViewById<Switch>(R.id.swIsController)
@@ -145,7 +184,7 @@ open class MainActivity  : AppCompatActivity() {
         }
 
         findViewById<RadioButton>(R.id.rbTecOOBWIFIAWARE).setOnCheckedChangeListener { _, isChecked ->
-            if(isChecked)oobMode = OOBTechnology.WIFIAWARE
+            if(isChecked)oobMode = OOBTechnology.WIFIAware
         }
         findViewById<RadioButton>(R.id.rbTecRangAUTO).setOnCheckedChangeListener { _, isChecked ->
             if(isChecked)rangingMode = RangingTechnology.AUTO
@@ -165,11 +204,18 @@ open class MainActivity  : AppCompatActivity() {
 
     }
 
+    /**
+     * Button funktion für die UI
+     */
     private fun stopMeasuringBtn()
     {
         oobConnector?.stopMeasuring()
         stopMeasuring()
     }
+
+    /**
+     * Stoppe die Ranging Verbindung, wird indirekt durch UI oder vom transportHandle aufgerufen
+     */
     private fun stopMeasuring(){
 
         if(rangingSession!=null){
@@ -191,15 +237,21 @@ open class MainActivity  : AppCompatActivity() {
         }
     }
 
+    /**
+     * Button funktion für die UI oder vom transportHandle(startMeasuringRequest()) aufgerufen
+     */
     private fun startMeasuringBtn(){
         if(swIsController?.isChecked==true){
-            oobConnector?.requestMeasuring()
+            oobConnector?.requestMeasuring(rangingMode)
         }
         else{
             startMeasuring()
         }
     }
 
+    /**
+     * Rückruf für wenn das Ranging tatsächlich gestartet wurde. Wird von MyRangingSessionCallback(onOpend()) aufgerufen
+     */
     private fun startedMeasuring(){
         runOnUiThread {
             startMeasuringButton?.isEnabled = false
@@ -210,6 +262,9 @@ open class MainActivity  : AppCompatActivity() {
         }
     }
 
+    /**
+     *  Bereitet das Ranging vor. Wählt die Technologie aus und setzt filter und einstellungen für nicht-RAW messungen
+     */
     @SuppressLint("NewApi", "MissingPermission")
     private fun startMeasuring(){
         if(rangingMode != RangingTechnology.BLE_RAW) {
@@ -277,6 +332,10 @@ open class MainActivity  : AppCompatActivity() {
             }
         }
     }
+
+    /**
+     * Bereitet BLE-RAW sessions vor. Abgegrenzt, da möglicherweise erst eine BLE Verbindung aufgebaut bzw. eine Addresse vom Partner angefordert werden muss.
+     */
     private fun startRawSessionForAddress(data:ByteArray){
         val permissions = mutableListOf(Manifest.permission.BLUETOOTH_CONNECT)
         permissions.add(Manifest.permission.BLUETOOTH_ADVERTISE)
@@ -295,7 +354,7 @@ open class MainActivity  : AppCompatActivity() {
         rangingSession = rangingManager?.createRangingSession(myExecutor, myRangingSessionCallback)
 
         val address :String = data.decodeToString()
-        Log.d("RawRanging","Recieved Address: $address; $data")
+        Log.d("RawRanging","Received Address: $address; $data")
         if(!BluetoothAdapter.checkBluetoothAddress(address)){
             return
         }
@@ -314,30 +373,29 @@ open class MainActivity  : AppCompatActivity() {
         if (swIsController?.isChecked == true) {
             role = RangingPreference.DEVICE_ROLE_INITIATOR
             config = RawInitiatorRangingConfig.Builder().addRawRangingDevice(rawDevice).build()
-            Log.d("rawRanging","I AM INITIATOR")
+            Log.d("RawRanging","I AM INITIATOR")
 
         } else {
             role = RangingPreference.DEVICE_ROLE_RESPONDER
             config = RawResponderRangingConfig.Builder().setRawRangingDevice(rawDevice).build()
-            Log.d("rawRanging","I AM RESPONDER")
+            Log.d("RawRanging","I AM RESPONDER")
         }
         startMeasuring2(config,role)
     }
 
+    /**
+     * startet mit fertigen Configs endgültig das Ranging
+     */
     private fun startMeasuring2(config : RangingConfig,role :Int){
         runOnUiThread {
             tvRangeDisplay?.text = "0.000m"
         }
         val rangingPreference: RangingPreference =  RangingPreference.Builder(role, config).build()
         rangingSession?.start(rangingPreference)
-        /*if(IS_RAW_MODE){
-            if(swIsController?.isChecked == true)
-                startMeasuring()
-        }
-        else*/
+
         if(swIsController?.isChecked == false)//normaly false in case of only OOB
         {
-            oobConnector?.startMeasuring()
+            oobConnector?.startMeasuring(rangingMode)
         }
 
         if(swMakeLog?.isChecked == true){
@@ -380,7 +438,7 @@ open class MainActivity  : AppCompatActivity() {
                 BleClient(this,transportHandle as OobConnectionCallback,connectButton!!)
             }
         }
-        else if(oobMode==OOBTechnology.WIFIAWARE){
+        else if(oobMode==OOBTechnology.WIFIAware){
             oobConnector = if (swIsController?.isChecked == false) {
                 WiFiAwareServer(this, transportHandle as OobConnectionCallback)
             } else {
@@ -480,11 +538,13 @@ open class MainActivity  : AppCompatActivity() {
                 callbackExecuter?.run {callbackFunction?.onReceiveData(data)  }
         }
 
-        override fun startMeasuringOrder() {
+        override fun startMeasuringOrder(mode:RangingTechnology) {
+            setRangingTechnology(mode)
             startMeasuring()
         }
 
-        override fun requestMeasuring() {
+        override fun requestMeasuring(mode:RangingTechnology) {
+            setRangingTechnology(mode)
             startMeasuringBtn()
         }
 
@@ -580,8 +640,8 @@ open class MainActivity  : AppCompatActivity() {
         abstract fun sendMessage(data: ByteArray)
         abstract fun isInitiator():Boolean
         abstract fun disconnect()
-        abstract fun startMeasuring()
-        abstract fun requestMeasuring()
+        abstract fun startMeasuring(mode:RangingTechnology)
+        abstract fun requestMeasuring(mode:RangingTechnology)
         abstract fun stopMeasuring()
         abstract fun sharedResult(distance: Double)
         fun destroy(){}
@@ -592,8 +652,8 @@ open class MainActivity  : AppCompatActivity() {
         abstract fun connectionEstablished()
         abstract fun connectionClosed()
         abstract fun messageReceived(data:ByteArray)
-        abstract fun startMeasuringOrder()
-        abstract fun requestMeasuring()
+        abstract fun startMeasuringOrder(mode:RangingTechnology)
+        abstract fun requestMeasuring(mode:RangingTechnology)
         abstract fun stopMeasuring()
         abstract fun sharedResult(distance: Double)
         abstract fun statusMessage(message:String)
@@ -656,10 +716,18 @@ open class MainActivity  : AppCompatActivity() {
 
 
     enum class OOBTechnology{
-        BLE,WIFIDirect,WIFIAWARE
+        BLE,WIFIDirect,WIFIAware
     }
     enum class RangingTechnology{
-        AUTO,WIFI,BLE,UWB,BLE_RAW
+        AUTO,WIFI,BLE,BLE_RAW,UWB
+    }
+
+
+    private fun setRangingTechnology(mode: RangingTechnology){
+        rangingMode = mode
+        runOnUiThread{
+            rgTecRANG?.check(rgTecRANG!!.getChildAt(mode.ordinal).id)
+        }
     }
 
     companion object {

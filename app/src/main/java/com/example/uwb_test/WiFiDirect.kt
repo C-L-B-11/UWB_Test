@@ -17,6 +17,7 @@ import com.google.android.gms.nearby.connection.PayloadCallback
 import com.google.android.gms.nearby.connection.PayloadTransferUpdate
 import com.google.android.gms.nearby.connection.Strategy
 import com.example.uwb_test.MainActivity.Companion.askPermissions
+import com.example.uwb_test.MainActivity.RangingTechnology
 
 class WiFiDirect(private val contextM: Context, private val callback: MainActivity.OobConnectionCallback,private val isHost:Boolean): MainActivity.OobConnection {
 
@@ -134,8 +135,8 @@ class WiFiDirect(private val contextM: Context, private val callback: MainActivi
                     val mode:Byte = receivedBytes[0]
                     var data = receivedBytes.copyOfRange(1,receivedBytes.size)
                     when(mode){
-                        START_MEASUREMENT -> callback.startMeasuringOrder()
-                        REQUEST_MEASUREMENT -> callback.requestMeasuring()
+                        START_MEASUREMENT -> callback.startMeasuringOrder(RangingTechnology.entries[data[0].toInt()])
+                        REQUEST_MEASUREMENT -> callback.requestMeasuring(RangingTechnology.entries[data[0].toInt()])
                         STOP_MEASUREMENT -> callback.stopMeasuring()
                         SHARED_RESULT -> callback.sharedResult(MainActivity.byteArrayToDouble(data))
                         DATA_PACKAGE -> {callback.messageReceived(data)}
@@ -167,12 +168,12 @@ class WiFiDirect(private val contextM: Context, private val callback: MainActivi
         callback.connectionClosed()
     }
 
-    override fun startMeasuring() {
-        sendCustomByteArray(START_MEASUREMENT,byteArrayOf(0))
+    override fun startMeasuring(mode:RangingTechnology) {
+        sendCustomByteArray(START_MEASUREMENT,byteArrayOf(mode.ordinal.toByte()))
     }
 
-    override fun requestMeasuring() {
-        sendCustomByteArray(REQUEST_MEASUREMENT,byteArrayOf(0))
+    override fun requestMeasuring(mode:RangingTechnology) {
+        sendCustomByteArray(REQUEST_MEASUREMENT,byteArrayOf(mode.ordinal.toByte()))
     }
 
     override fun stopMeasuring() {
