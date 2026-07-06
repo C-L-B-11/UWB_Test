@@ -147,9 +147,6 @@ class BleServer(private val context : Context, private val callback : MainActivi
                 advertiseCallback
             )
 
-
-
-
             gattServer = bluetoothManager.openGattServer(context, gattServerCallback)
             val service = BluetoothGattService(
                 SERVICE_UUID,
@@ -190,7 +187,7 @@ class BleServer(private val context : Context, private val callback : MainActivi
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    override fun sharedResult(distance: Double) {
+    override fun shareResult(distance: Double) {
         sendCodedMessage(SHARED_RESULT,MainActivity.doubleToByteArray(distance))
     }
 

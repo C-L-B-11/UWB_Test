@@ -43,13 +43,12 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.format
 import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
-
 import java.util.UUID
+
 import java.util.concurrent.Executor
 import kotlin.experimental.and
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
-
 
 
 val SERVICE_UUID: UUID = UUID.fromString("0000180D-0000-1000-8000-00805f9b34fb")
@@ -83,19 +82,121 @@ open class MainActivity  : AppCompatActivity() {
     private var rgTecRANG: RadioGroup? = null
 
     /**
-    *   Objekt das die OOB Verbindung zum anderen gerät steuert und unterhält
+    *   Objekt das die OOB Verbindung zum anderen Gerät steuert und unterhält
     */
     private var oobConnector : OobConnection? = null
 
     /**
-     * Schnittstelle zwischen oobConnector, UI und Ranging aufbau
+     * Executor Klasse für verschiedene Callbacks
      */
-    private var transportHandle : MyTransportHandle? = null
+    private val myExecutor = Executor { r -> r.run() }
+
+    /**
+     * Schnittstelle für die Verbindung zwischen rangingSession und oobConnector, sowie Zustandsrückmeldung zur UI
+     */
+    private var transportHandle = object: TransportHandle,OobConnectionCallback {
+        /**
+         * Executer für die Funktion mit der Daten zurück ans TransportHandle gegeben werden
+         */
+        var callbackExecuter : Executor? = null
+        /**
+         * Funktion mit der Daten zurück ans TransportHandle gegeben werden
+         */
+        var callbackFunction : TransportHandle.ReceiveCallback? = null
+        /**
+         * Member von TransportHandle
+         */
+        override fun registerReceiveCallback(p0: Executor,p1: TransportHandle.ReceiveCallback) {
+            callbackExecuter = p0
+            callbackFunction = p1
+        }
+        /**
+         * Member von TransportHandle
+         */
+        override fun sendData(p0: ByteArray) {
+            val s = byteToHexString(p0)
+            Log.d("TransportHandle","sending message $s")
+            oobConnector?.sendMessage(p0)
+        }
+        /**
+         * Member von TransportHandle
+         */
+        override fun close() {
+            Log.d("TransportHandle","close")
+        }
+        /**
+         * Member von OOBConnectionCallback
+         */
+        override fun connectionEstablished() {
+            Log.d("TransportHandle","connection established")
+            runOnUiThread {
+                startMeasuringButton?.isEnabled=true
+
+            }
+            rangingManager?.registerCapabilitiesCallback(myExecutor,capabilitiesCallback)
+        }
+        /**
+         * Member von OOBConnectionCallback
+         */
+        override fun connectionClosed() {
+            Log.d("TransportHandle","connection closed")
+            rangingSession?.close()
+            oobConnector?.destroy()
+            oobConnector = null
+            disconnected()
+            rangingManager?.unregisterCapabilitiesCallback(capabilitiesCallback)
+
+        }
+        /**
+         * Member von OOBConnectionCallback
+         */
+        override fun messageReceived(data: ByteArray) {
+            val s = byteToHexString(data)
+            Log.d("TransportHandle","message Received $s")
+            if(callbackExecuter!= null)
+                callbackExecuter?.run {callbackFunction?.onReceiveData(data)  }
+        }
+        /**
+         * Member von OOBConnectionCallback
+         */
+        override fun startMeasuringOrder(mode:RangingTechnology) {
+            setRangingTechnology(mode)
+            startMeasuring()
+        }
+        /**
+         * Member von OOBConnectionCallback
+         */
+        override fun requestMeasuring(mode:RangingTechnology) {
+            setRangingTechnology(mode)
+            startMeasuringBtn()
+        }
+        /**
+         * Member von OOBConnectionCallback
+         */
+        override fun stopMeasuring() {
+            if(rangingSession!=null)
+                rangingSession?.close()
+        }
+        /**
+         * Member von OOBConnectionCallback
+         */
+        override fun sharedResult(distance: Double) {
+            gotResult(distance)
+        }
+        /**
+         * Member von OOBConnectionCallback
+         */
+        override fun statusMessage(message: String) {
+            runOnUiThread{
+                exception?.text = message
+            }
+        }
+    }
 
     /**
      * Referenz auf das Context Objekt
      */
-    private var rangingManager :RangingManager? = null
+    private var rangingManager :RangingManager?  = null
 
     /**
      *  unterhält/steuert das Ranging
@@ -103,9 +204,60 @@ open class MainActivity  : AppCompatActivity() {
     private var rangingSession : RangingSession? = null
 
     /**
+     *
+     */
+    private val myRangingSessionCallback = object : RangingSession.Callback{
+        override fun onClosed(p0: Int) {
+            Log.d("RangingResult","onClosed: $p0")
+            rangingSession = null
+            stopMeasuring()
+        }
+
+        @SuppressLint("SetTextI18n")
+        override fun onOpenFailed(p0: Int) {
+            Log.d("RangingResult","onOpenFailed: $p0")
+            rangingSession = null
+            stopMeasuring()
+            runOnUiThread{
+                exception?.text="Failed to start ranging"
+            }
+        }
+
+        override fun onOpened() {
+            Log.d("RangingResult","onOpened")
+            startedMeasuring()
+        }
+
+        override fun onResults(p0: RangingDevice, p1: RangingData) {
+            Log.d("RangingResult","onResults: $p1")
+            val distance = p1.distance?.measurement
+            if(distance!=null) {
+                gotResult(distance)
+                oobConnector?.shareResult(distance)
+            }
+        }
+
+        override fun onStarted(p0: RangingDevice, p1: Int) {
+            Log.d("RangingResult","onStarted $p1")
+        }
+
+        override fun onStopped(p0: RangingDevice, p1: Int) {
+            Log.d("RangingResult","onStopped $p1")
+            rangingSession?.close()
+        }
+    }
+
+    /**
      * Callback für die Ranging Capabilities
      */
-    private var capabilitiesCallback : MyRangingCapabilitiesCallback? = null
+    private var capabilitiesCallback = object :RangingManager.RangingCapabilitiesCallback{
+        override fun onRangingCapabilities(p0: android.ranging.RangingCapabilities) {
+            Log.d("RangingCapa", "Capabilities: $p0")
+            availableCapabilities.BLE_CS = p0.csCapabilities != null
+            availableCapabilities.UWB = p0.uwbCapabilities != null
+            availableCapabilities.WIFI_RTT = p0.rttRangingCapabilities != null
+        }
+    }
 
     /**
      * Speichert die letzten Ranging Capabilities
@@ -137,27 +289,21 @@ open class MainActivity  : AppCompatActivity() {
         else             onFileSaveCancelled()
     }
 
-
     /**
-     * intialisierungen
+     * Initialisierungen
      */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_main);
+
         rangingManager = baseContext.getSystemService(RangingManager::class.java) as RangingManager
+
         initUI()
-        transportHandle = MyTransportHandle()
-
-        capabilitiesCallback = MyRangingCapabilitiesCallback()
-
-
-
-        //Log.d("Main",if(this.packageManager.hasSystemFeature(PackageManager.FEATURE_WIFI_AWARE)){"Yes wifi aware"} else {"No wifi aware"})
     }
 
     /**
-     * initalisierungen für die UI Referenzen und setzen der Button funktionen
+     * Initalisierungen für die UI Referenzen und setzen der Button funktionen
      */
     private fun initUI() {
         tvRangeDisplay = findViewById<TextView>(R.id.rangeDisplay)
@@ -250,7 +396,7 @@ open class MainActivity  : AppCompatActivity() {
     }
 
     /**
-     * Rückruf für wenn das Ranging tatsächlich gestartet wurde. Wird von MyRangingSessionCallback(onOpend()) aufgerufen
+     * Rückruf für den Fall, dass das Ranging tatsächlich gestartet wurde. Wird von MyRangingSessionCallback(onOpend()) aufgerufen
      */
     private fun startedMeasuring(){
         runOnUiThread {
@@ -263,9 +409,9 @@ open class MainActivity  : AppCompatActivity() {
     }
 
     /**
-     *  Bereitet das Ranging vor. Wählt die Technologie aus und setzt filter und einstellungen für nicht-RAW messungen
+     *  Bereitet das Ranging vor. Wählt die Technologie aus und setzt Filter und Einstellungen für nicht-RAW Messungen
      */
-    @SuppressLint("NewApi", "MissingPermission")
+    @SuppressLint("NewApi", "MissingPermission", "SetTextI18n")
     private fun startMeasuring(){
         if(rangingMode != RangingTechnology.BLE_RAW) {
             val permissions = mutableListOf(Manifest.permission.BLUETOOTH_CONNECT)
@@ -287,15 +433,13 @@ open class MainActivity  : AppCompatActivity() {
                 return
             }
 
-            val myRangingSessionCallback = MyRangingSessionCallback()
-            val myExecutor = MyExecutor()
             rangingSession = rangingManager?.createRangingSession(myExecutor, myRangingSessionCallback)
             var role: Int
             var config: RangingConfig
 
             val rangingDevice = RangingDevice.Builder().build()
 
-            val deviceHandle: DeviceHandle = DeviceHandle.Builder(rangingDevice, transportHandle!!)
+            val deviceHandle: DeviceHandle = DeviceHandle.Builder(rangingDevice, transportHandle)
                 .build()
             val filter: Set<Int> = when (rangingMode) {
                 RangingTechnology.BLE -> setOf(RangingManager.BLE_CS)
@@ -325,7 +469,7 @@ open class MainActivity  : AppCompatActivity() {
                 //Log.d("RawRanging","Other Address: $address; ${address?.toByteArray()}")
                 startRawSessionForAddress(address!!.toByteArray())
             }
-            catch(e:Exception){
+            catch(_:Exception){
                 runOnUiThread{
                     exception?.text = "No BLE device found"
                 }
@@ -348,9 +492,6 @@ open class MainActivity  : AppCompatActivity() {
             return
         }
 
-
-        val myRangingSessionCallback = MyRangingSessionCallback()
-        val myExecutor = MyExecutor()
         rangingSession = rangingManager?.createRangingSession(myExecutor, myRangingSessionCallback)
 
         val address :String = data.decodeToString()
@@ -386,14 +527,15 @@ open class MainActivity  : AppCompatActivity() {
     /**
      * startet mit fertigen Configs endgültig das Ranging
      */
-    private fun startMeasuring2(config : RangingConfig,role :Int){
+    @SuppressLint("SetTextI18n")
+    private fun startMeasuring2(config : RangingConfig, role :Int){
         runOnUiThread {
-            tvRangeDisplay?.text = "0.000m"
+            tvRangeDisplay?.text = "0,000m"
         }
         val rangingPreference: RangingPreference =  RangingPreference.Builder(role, config).build()
         rangingSession?.start(rangingPreference)
 
-        if(swIsController?.isChecked == false)//normaly false in case of only OOB
+        if(swIsController?.isChecked == false)//normally false in case of only OOB
         {
             oobConnector?.startMeasuring(rangingMode)
         }
@@ -404,7 +546,9 @@ open class MainActivity  : AppCompatActivity() {
     }
 
 
-
+    /**
+     * beendet die OOB Verbindung, wird vom User ausgelöst
+     */
     @SuppressLint("SetTextI18n")
     private fun disconnect(){
         if (!askPermissions(this, *arrayOf(Manifest.permission.BLUETOOTH_CONNECT)))
@@ -414,6 +558,10 @@ open class MainActivity  : AppCompatActivity() {
             oobConnector?.disconnect()
         }
     }
+
+    /**
+     * versetzt die UI nach trennung der Verbindung in den Ausgangszustand. Wird vom transportHandle callback aufgerufen
+     */
     private fun disconnected(){
         runOnUiThread {
             connectButton?.isEnabled = true
@@ -426,8 +574,10 @@ open class MainActivity  : AppCompatActivity() {
         }
     }
 
+    /**
+     * startet die OOB Verbindung. Wird vom User ausgelöst
+     */
     private fun connect() {
-
         if(oobMode==OOBTechnology.WIFIDirect){
             oobConnector = WiFiDirect(this,transportHandle as OobConnectionCallback,!(swIsController!!.isChecked))
         }
@@ -445,12 +595,17 @@ open class MainActivity  : AppCompatActivity() {
                 WiFiAwareClient(this,transportHandle as OobConnectionCallback)
             }
         }
-        connectButton?.isEnabled=false
-        disconnectButton?.isEnabled=true
-        swIsController?.isEnabled = false
-        toggleRadioGroup(rgTecOOB!!,false)
+        runOnUiThread {
+            connectButton?.isEnabled = false
+            disconnectButton?.isEnabled = true
+            swIsController?.isEnabled = false
+            toggleRadioGroup(rgTecOOB!!, false)
+        }
     }
 
+    /**
+     * Fügt einem Logevent einen Zeitstempel hinzu und speichert es in logEntries
+     */
     @OptIn(ExperimentalTime::class)
     public fun logEntry(msg:String){
         if(logEntries==null)
@@ -461,6 +616,9 @@ open class MainActivity  : AppCompatActivity() {
         logEntries?.add(s)
     }
 
+    /**
+     * Startet den Log Datei Dialog, wird von StopMeasuring() aufgerufen
+     */
     public fun safeLog(){
         if(logEntries==null || logEntries?.size==0) {
             onFileSaveCancelled()
@@ -474,6 +632,9 @@ open class MainActivity  : AppCompatActivity() {
         )
     }
 
+    /**
+     * Verarbeitet die vom MyRangingSessionCallback empfangenen Daten  (UI und log)
+     */
     @SuppressLint("DefaultLocale")
     public fun gotResult(data:Double){
         runOnUiThread {
@@ -487,141 +648,9 @@ open class MainActivity  : AppCompatActivity() {
         }
     }
 
-
-    public inner class MyTransportHandle(): TransportHandle,OobConnectionCallback {
-        var callbackExecuter : Executor? = null
-        var callbackFunction : TransportHandle.ReceiveCallback? = null
-
-
-        override fun registerReceiveCallback(
-            p0: Executor,
-            p1: TransportHandle.ReceiveCallback
-        ) {
-            callbackExecuter = p0
-            callbackFunction = p1
-        }
-
-        override fun sendData(p0: ByteArray) {
-            val s = byteToHexString(p0)
-            Log.d("TransportHandle","sending message $s")
-            oobConnector?.sendMessage(p0)
-        }
-
-        override fun close() {
-            Log.d("TransportHandle","close")
-        }
-
-
-        override fun connectionEstablished() {
-            Log.d("TransportHandle","connection established")
-            runOnUiThread {
-                startMeasuringButton?.isEnabled=true
-
-            }
-            rangingManager?.registerCapabilitiesCallback(MyExecutor(),capabilitiesCallback!!)
-        }
-
-        override fun connectionClosed() {
-            Log.d("TransportHandle","connection closed")
-            rangingSession?.close()
-            oobConnector?.destroy()
-            oobConnector = null
-            disconnected()
-            rangingManager?.unregisterCapabilitiesCallback(capabilitiesCallback!!)
-
-        }
-
-        override fun messageReceived(data: ByteArray) {
-            val s = byteToHexString(data)
-            Log.d("TransportHandle","message Received $s")
-            if(callbackExecuter!= null)
-                callbackExecuter?.run {callbackFunction?.onReceiveData(data)  }
-        }
-
-        override fun startMeasuringOrder(mode:RangingTechnology) {
-            setRangingTechnology(mode)
-            startMeasuring()
-        }
-
-        override fun requestMeasuring(mode:RangingTechnology) {
-            setRangingTechnology(mode)
-            startMeasuringBtn()
-        }
-
-        override fun stopMeasuring() {
-            if(rangingSession!=null)
-                rangingSession?.close()
-        }
-
-        override fun sharedResult(distance: Double) {
-            gotResult(distance)
-        }
-
-        override fun statusMessage(message: String) {
-            runOnUiThread{
-                exception?.text = message
-            }
-        }
-    }
-
-    public inner class MyRangingSessionCallback: RangingSession.Callback{
-        override fun onClosed(p0: Int) {
-            Log.d("RangingResult","onClosed: $p0")
-            rangingSession = null
-            stopMeasuring()
-        }
-
-        override fun onOpenFailed(p0: Int) {
-            Log.d("RangingResult","onOpenFailed: $p0")
-            rangingSession = null
-            stopMeasuring()
-            runOnUiThread{
-                exception?.text="Failed to start ranging"
-            }
-        }
-
-        override fun onOpened() {
-            Log.d("RangingResult","onOpened")
-            startedMeasuring()
-        }
-
-        override fun onResults(p0: RangingDevice, p1: RangingData) {
-            Log.d("RangingResult","onResults: $p1")
-            val distance = p1.distance?.measurement
-            if(distance!=null) {
-                gotResult(distance)
-                oobConnector?.sharedResult(distance)
-            }
-        }
-
-        override fun onStarted(p0: RangingDevice, p1: Int) {
-            Log.d("RangingResult","onStarted $p1")
-        }
-
-        override fun onStopped(p0: RangingDevice, p1: Int) {
-            Log.d("RangingResult","onStopped $p1")
-            rangingSession?.close()
-        }
-
-    }
-
-    public inner class MyRangingCapabilitiesCallback:RangingManager.RangingCapabilitiesCallback{
-        override fun onRangingCapabilities(p0: android.ranging.RangingCapabilities) {
-            Log.d("RangingCapa", "Capabilities: $p0")
-            availableCapabilities.BLE_CS = p0.csCapabilities != null
-            availableCapabilities.UWB = p0.uwbCapabilities != null
-            availableCapabilities.WIFI_RTT = p0.rttRangingCapabilities != null
-            /*val bleCsSupported = p0.csCapabilities != null
-            val uwbSupported = p0.uwbCapabilities != null
-            Log.d("RangingCapa", "BLE_CS Supported: $bleCsSupported, UWB Supported: $uwbSupported")
-            
-            if (rangingMode == RangingTechnology.BLE && !bleCsSupported) {
-                runOnUiThread {
-                    Toast.makeText(this@MainActivity, "BLE CS not supported on this hardware", Toast.LENGTH_LONG).show()
-                }
-            }*/
-        }
-    }
+    /**
+     * Wird genutzt, um die zuletzt empfangenen RangingCapabilities zu speichern
+     */
     public inner class MyRangingCapabilities{
         var BLE_CS:Boolean = false
         //var BLE_RSSI:Boolean = false
@@ -630,35 +659,94 @@ open class MainActivity  : AppCompatActivity() {
         //var WIFI_PD :Boolean = false
     }
 
-    public class MyExecutor : Executor {
-        override fun execute(r: Runnable) {
-            r.run()
-        }
-    }
-
     public interface OobConnection{
+        /**
+         * Gibt Daten an anderes Gerät weiter. Ruft messageReceived() beim Callback der Gegenseite auf
+         */
         abstract fun sendMessage(data: ByteArray)
+
+        /**
+         * verrät die Rolle des Verbinders
+         */
         abstract fun isInitiator():Boolean
+
+        /**
+         * trennt die Verbindung
+         */
         abstract fun disconnect()
+
+        /**
+         * Initiator befiehlt dem Responder die Messung zu starten
+         */
         abstract fun startMeasuring(mode:RangingTechnology)
+
+        /**
+         * Responder bittet den Initiator die Messung zu starten
+         */
         abstract fun requestMeasuring(mode:RangingTechnology)
+
+        /**
+         * befiehlt der Gegenseite das Ranging zu beenden, ruft stopMeasuring() beim Callback der Gegenseite auf
+         */
         abstract fun stopMeasuring()
-        abstract fun sharedResult(distance: Double)
+
+        /**
+         * teilt das ermittelte Resultat mit der Gegenseite, ruft sharedResult() beim Callback der Gegenseite auf
+         */
+        abstract fun shareResult(distance: Double)
+
+        /**
+         *  Kann von OOB implementierungen genutzt werden um Speicher oder Ports frei zu geben
+         */
         fun destroy(){}
 
     }
 
     public interface OobConnectionCallback{
+        /**
+         * Verbindung wurde erfolgreich Aufgebaut, es kann kommuniziert werden
+         */
         abstract fun connectionEstablished()
+
+        /**
+         * Verbindung wurde geschlossen, es kann nicht kommuniziert werden
+         */
         abstract fun connectionClosed()
+
+        /**
+         * Von der Gegenseite wurden Daten empfangen
+         */
         abstract fun messageReceived(data:ByteArray)
+
+        /**
+         * Der Initiator befiehlt dem Responder die Messung zu starten
+         */
         abstract fun startMeasuringOrder(mode:RangingTechnology)
+
+        /**
+         * Der Responder möchte, dass der Initiator die Messung startet
+         */
         abstract fun requestMeasuring(mode:RangingTechnology)
+
+        /**
+         * Die Messung soll beendet werden
+         */
         abstract fun stopMeasuring()
+
+        /**
+         * Der Initiator teilt ein Messergebnis mit dem Responder
+         */
         abstract fun sharedResult(distance: Double)
+
+        /**
+         * Eine Statusmeldung von der OOBConnection wird übergeben
+         */
         abstract fun statusMessage(message:String)
     }
 
+    /**
+     * Generiert einen String mit aktuellem Datum und Zeit
+     */
     @OptIn(ExperimentalTime::class)
     public fun dateTimeString():String{
         val time = Clock.System.now()
@@ -678,7 +766,6 @@ open class MainActivity  : AppCompatActivity() {
     )
 
     class SaveFileContract : ActivityResultContract<SaveFileInput, Uri?>() {
-
         override fun createIntent(context: Context, input: SaveFileInput): Intent =
             Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -695,12 +782,12 @@ open class MainActivity  : AppCompatActivity() {
         runOnUiThread {
             Toast.makeText(this, "Save cancelled.", Toast.LENGTH_SHORT).show()
         }
+        logEntries = null
     }
 
     private fun writeContentToUri(uri: Uri) {
         try {
             contentResolver.openOutputStream(uri)?.use { outputStream ->
-                // Replace this with whatever bytes / text you want to save:
                 var fileText = ""
                 for(s in logEntries!!){
                     fileText += s
@@ -714,15 +801,23 @@ open class MainActivity  : AppCompatActivity() {
         logEntries = null
     }
 
-
+    /**
+     * wird genutzt, um die aktuell ausgewählte OOB Technologie zu speichern
+     */
     enum class OOBTechnology{
         BLE,WIFIDirect,WIFIAware
     }
+
+    /**
+     * wird genutzt, um die aktuell ausgewählte Ranging Technologie zu speichern und zu kommunizieren
+     */
     enum class RangingTechnology{
-        AUTO,WIFI,BLE,BLE_RAW,UWB
+        AUTO,WIFI,BLE,BLE_RAW,UWB    //Reihenfolge muss der der UI entsprechen
     }
 
-
+    /**
+     * passt die UI und lokale Variable an, wenn vom anderen Gerät eine andere Ranging Technologie verlangt wird
+     */
     private fun setRangingTechnology(mode: RangingTechnology){
         rangingMode = mode
         runOnUiThread{
@@ -731,15 +826,17 @@ open class MainActivity  : AppCompatActivity() {
     }
 
     companion object {
+        /**
+         * Einheitliche Methode um Berechtigungen zu prüfen und ggf. zu fragen
+         */
         fun askPermissions(context: Context, vararg permissions: String): Boolean {
             val activity = context as? Activity
-            var allGranted = true
+
             val missingPermissions = mutableListOf<String>()
             Log.d("Permissions","Checking permissions: ${permissions.joinToString()}")
             if(permissions.isEmpty())return true
             for (permission in permissions) {
                 if (ActivityCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
-                    allGranted = false
                     missingPermissions.add(permission)
                 }
             }
@@ -752,7 +849,7 @@ open class MainActivity  : AppCompatActivity() {
                     Log.e("Permissions", "Cannot request permissions from a non-Activity context: $context")
                 }
             }
-            allGranted = true
+            var allGranted = true
             for (permission in missingPermissions) {
                 if (ActivityCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
                     allGranted = false
@@ -763,22 +860,33 @@ open class MainActivity  : AppCompatActivity() {
             return allGranted
         }
 
+        /**
+         * Setzt alle RadioButtons einer RadioGroup auf (nicht) klickbar
+         */
         fun toggleRadioGroup(rg:RadioGroup,enabled:Boolean){
             for (i in 0 until rg.size){
                 rg.getChildAt(i).isEnabled = enabled
             }
         }
+
+        /**
+         * Verwandelt ein ByteArray in ein String von Hexadezimalzahlen
+         */
         fun byteToHexString(data:ByteArray):String{
             var s = ""
             for(b in data)
             {
-                s+= Bit4ToHex((b.toInt() shr 4).toByte())
-                s+= Bit4ToHex(b)
+                s+= bit4ToHex((b.toInt() shr 4).toByte())
+                s+= bit4ToHex(b)
                 s+=';'
             }
             return s
         }
-        fun Bit4ToHex(data:Byte):Char{
+
+        /**
+         * Wandelt die ersten 4 Bits eines Bytes in das entsprechende Hexadezimalzeichen um
+         */
+        fun bit4ToHex(data:Byte):Char{
             val data2 :Int = (data and 0xF).toInt()
             when(data2){
                 0 -> return '0'
@@ -800,10 +908,17 @@ open class MainActivity  : AppCompatActivity() {
                 else -> return 'X'
             }
         }
+
+        /**
+         * Wandelt ein Double in ein ByteArray um
+         */
         fun doubleToByteArray(value: Double): ByteArray {
             val bits = java.lang.Double.doubleToLongBits(value)
             return ByteArray(8) { i -> (bits shr (56 - i * 8)).toByte() }
         }
+        /**
+         * Wandelt ein ByteArray der länge 8 in ein Double um
+         */
         fun byteArrayToDouble(bytes: ByteArray): Double {
             require(bytes.size == 8)
             val bits = bytes.foldIndexed(0L) { i, acc, b ->

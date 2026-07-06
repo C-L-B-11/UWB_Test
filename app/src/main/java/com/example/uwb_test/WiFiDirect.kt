@@ -180,7 +180,7 @@ class WiFiDirect(private val contextM: Context, private val callback: MainActivi
         sendCustomByteArray(STOP_MEASUREMENT,byteArrayOf(0))
     }
 
-    override fun sharedResult(distance: Double) {
+    override fun shareResult(distance: Double) {
         sendCustomByteArray(SHARED_RESULT,MainActivity.doubleToByteArray(distance))
     }
 }

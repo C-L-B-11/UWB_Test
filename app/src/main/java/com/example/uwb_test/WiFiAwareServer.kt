@@ -187,7 +187,7 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
     }
 
 
-    override fun sharedResult(distance: Double) {
+    override fun shareResult(distance: Double) {
         sendCodedMessage(SHARED_RESULT,MainActivity.doubleToByteArray(distance))
     }
 

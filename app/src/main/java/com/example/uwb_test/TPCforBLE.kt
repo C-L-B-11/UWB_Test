@@ -17,7 +17,7 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
     private val FIN_PACKAGE : Byte = 0b00001010
 
 
-    private val maxpackageLenght = pcktLen_
+    private val maxPackageLength = pcktLen_
     private val sendPackageFunction = sendPcktFunc_
     private val receivedMessageFunction = recvMsgFunc_
 
@@ -158,14 +158,14 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
     private fun getPackageData(id:Int):ByteArray{
         if(id>=totalPackages())
             return byteArrayOf()
-        val indexStart = id*(maxpackageLenght-2)
-        val indexEnd = Math.min((maxpackageLenght-2)+indexStart,sendMessageBuffer?.size!!)
+        val indexStart = id*(maxPackageLength-2)
+        val indexEnd = Math.min((maxPackageLength-2)+indexStart,sendMessageBuffer?.size!!)
         return sendMessageBuffer?.copyOfRange(indexStart,indexEnd)!!
     }
 
     private fun totalPackages(): Int {
         if(sendMessageBuffer == null) return 0
-        val dataLen = maxpackageLenght-2
+        val dataLen = maxPackageLength-2
         val msgLen = sendMessageBuffer?.size
         return msgLen!!/dataLen +1
     }
