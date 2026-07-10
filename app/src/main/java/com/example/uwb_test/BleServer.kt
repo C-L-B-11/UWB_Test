@@ -2,7 +2,6 @@ package com.example.uwb_test
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.app.Activity
 
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
@@ -16,10 +15,8 @@ import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.content.Context
-import android.content.pm.PackageManager
 import android.util.Log
 import androidx.annotation.RequiresPermission
-import androidx.core.app.ActivityCompat
 import com.example.uwb_test.MainActivity.Companion.askPermissions
 import com.example.uwb_test.MainActivity.RangingTechnology
 
@@ -30,15 +27,29 @@ class BleServer(private val context : Context, private val callback : MainActivi
     private val bluetoothManager =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
 
+    /**
+     * Verbundenes Gerät
+     */
     private var myDevice: BluetoothDevice? = null
 
-    private val sP : (ByteArray) ->Unit = {d:ByteArray -> sendFinalMessage(d)}
-    private val rM : (ByteArray) ->Unit = {
-        d:ByteArray -> callback.messageReceived(d)
-        //Log.d("BLE_SERVER","message Received: ${MainActivity.byteToHexString(d)}")
-    }
-    private var tcpAdapter = TPCforBLE(sP,rM,20)
+    /**
+     * Callback Funktion für den tcpAdapter zum Senden von Daten
+     */
+    private val sendPayloadFunc : (ByteArray) ->Unit = { d:ByteArray -> sendFinalMessage(d)}
 
+    /**
+     * Callback Funktion fur den tcpAdapter zum Melden einer vollständig empfangenen Nachricht
+     */
+    private val receivedMessageFunc : (ByteArray) ->Unit = {d:ByteArray -> callback.messageReceived(d)}
+
+    /**
+     * tcpAdapter zerstückelt Nachrichten auf eine Maximallänge von 20 Bits und überwacht die vollständige Übertragung in beide Richtungen
+     */
+    private var tcpAdapter = TPCforBLE(sendPayloadFunc,receivedMessageFunc,20)
+
+    /**
+     * Bluetooth Gatt Characteristic die zur Kommunikation verwendet wird. Sowohl Server als auch Client können einen Wert (Data) setzten, und werden benachrichtigt, wenn der andere es tut.
+     */
     public val characteristic = BluetoothGattCharacteristic(
         CHAR_UUID,
         BluetoothGattCharacteristic.PROPERTY_WRITE or
@@ -49,7 +60,9 @@ class BleServer(private val context : Context, private val callback : MainActivi
     )
 
 
-
+    /**
+     *  Callback für alles, was der gatt Server zu berichten hat
+     */
     private val gattServerCallback = object : BluetoothGattServerCallback() {
 
         override fun onConnectionStateChange(device: BluetoothDevice?, status: Int, newState: Int) {
@@ -58,7 +71,7 @@ class BleServer(private val context : Context, private val callback : MainActivi
                 Log.d("BLE_SERVER","Connected: $device")
                 callback.connectionEstablished()
             }
-            if(newState ==BluetoothProfile.STATE_DISCONNECTED)
+            if(newState == BluetoothProfile.STATE_DISCONNECTED)
             {
                 disconnect()
             }
@@ -66,7 +79,9 @@ class BleServer(private val context : Context, private val callback : MainActivi
         }
 
 
-
+        /**
+         * Hier treffen alle Nachrichten vom anderen Gerät ein
+         */
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         override fun onCharacteristicWriteRequest(
             device: BluetoothDevice,
@@ -94,8 +109,6 @@ class BleServer(private val context : Context, private val callback : MainActivi
                     callback.statusMessage("Communication error")
                 }
             }
-
-
         }
 
 
@@ -114,7 +127,10 @@ class BleServer(private val context : Context, private val callback : MainActivi
         }
     }
 
-    private class MyBluetoothAdvertiseCallback: AdvertiseCallback(){
+    /**
+     * Callback für das BluetoothAdvertising, nicht weiter relevant
+     */
+    private val advertiseCallback = object : AdvertiseCallback(){
         override fun onStartFailure(errorCode: Int) {
             Log.d("BluetoothAdvertiseCallback","onStartFailure: errorCode: $errorCode")
         }
@@ -122,6 +138,10 @@ class BleServer(private val context : Context, private val callback : MainActivi
             Log.d("BluetoothAdvertiseCallback","onStartSuccess: settingsInEffect: $settingsInEffect")
         }
     }
+
+    /**
+     * GattServer der vom BLEServer gehosted wird
+     */
     private var gattServer : BluetoothGattServer? = null
 
 
@@ -140,7 +160,7 @@ class BleServer(private val context : Context, private val callback : MainActivi
             val advertiseData: AdvertiseData =
                 AdvertiseData.Builder().setIncludeDeviceName(true).setIncludeTxPowerLevel(true)
                     .build()
-            val advertiseCallback = MyBluetoothAdvertiseCallback()
+
             bluetoothManager.adapter?.bluetoothLeAdvertiser?.startAdvertising(
                 advertiseSettings,
                 advertiseData,
@@ -166,7 +186,6 @@ class BleServer(private val context : Context, private val callback : MainActivi
         if(bluetoothManager.getConnectedDevices(BluetoothProfile.GATT_SERVER).size==0){
             gattServer?.close()
             callback.connectionClosed()
-
         }
         else
         {
@@ -210,7 +229,9 @@ class BleServer(private val context : Context, private val callback : MainActivi
     }
 
 
-
+    /**
+     * Kombiniert den Nachrichten Typ mit der nutzlast und sendet es an den BLEClient
+     */
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun sendCodedMessage(mode:Byte, data:ByteArray){
         if(data.size>19){
@@ -222,6 +243,9 @@ class BleServer(private val context : Context, private val callback : MainActivi
         sendFinalMessage(sendData)
     }
 
+    /**
+     * Sendet die Daten an den BLEClient
+     */
     private fun sendFinalMessage(data:ByteArray){
         if(data.size>20){
             throw Exception("Data too long")
@@ -233,6 +257,9 @@ class BleServer(private val context : Context, private val callback : MainActivi
         }
     }
 
+    /**
+     * Liefert die MAC Adresse des anderen Bluetooth Gerätes zurück
+     */
     override fun getAddress() :String?{
         if(myDevice!=null){
             return myDevice?.address

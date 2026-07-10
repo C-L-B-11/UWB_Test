@@ -17,19 +17,54 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
     private val FIN_PACKAGE : Byte = 0b00001010
 
 
+    /**
+     * Wie lang darf ein Packet maximal sein
+     */
     private val maxPackageLength = pcktLen_
+
+    /**
+     * Callback Methode um ein Packet an das andere Gerät zu senden (Aufruf für übertragungsschicht)
+     */
     private val sendPackageFunction = sendPcktFunc_
+
+    /**
+     * Callback Methode um eine fertig empfangene Nachricht zurückzugeben (Rückruf für Anwendugsschicht)
+     */
     private val receivedMessageFunction = recvMsgFunc_
 
-
+    /**
+     * Buffer für die Übertragung einer Nachricht
+     */
     private var sendMessageBuffer:ByteArray? = null
+
+    /**
+     * Buffer für die empfangene Nachricht
+     */
     private var recvMessageBuffer:ByteArray? = null
+
+    /**
+     * Zustand in dem sich der Adapter befindet
+     */
     private var modeMain : TCPModes = TCPModes.Idle
+
+    /**
+     * Nummer des Packetes, das zuletzt empfangen oder gesendet Wurde
+     */
     private var lastPackageId : Byte? = null
 
+    /**
+     * Zuletzt gesendetes Packet wird für den Fall des Timeouts zwischengespeichert
+     */
     private var lastPackage : ByteArray? = null
+
+    /**
+     * Timeout timer
+     */
     private var repeatTimer : Job? = null
 
+    /**
+     * Bringt den Adapter in den Ausgangszustand
+     */
     public fun reset(){
         sendMessageBuffer = null
         recvMessageBuffer = null
@@ -40,6 +75,9 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
         repeatTimer = null
     }
 
+    /**
+     * die Übertragungsschicht meldet den hier den Empfang eines Packetes
+     */
     public fun receivedPackage(rPackage:ByteArray):Boolean {
         if(rPackage.size<2)
             return false
@@ -66,7 +104,10 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
         }
         
     }
-    
+
+    /**
+     * Methode um mit empfangenenm Packet im Idle Modus umzugehen
+     */
     private fun handleIdle(modeLocal:Byte,packageIdLocal:Byte,data:ByteArray):Boolean{
         when(modeLocal){
             DATA_PACKAGE -> {
@@ -91,6 +132,9 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
         return true
     }
 
+    /**
+     * Methode um mit empfangenenm Packet im Receive Modus umzugehen
+     */
     private fun handleReceive(modeLocal:Byte, packageIdLocal:Byte, data:ByteArray):Boolean{
         when(modeLocal){
             DATA_PACKAGE -> {
@@ -118,6 +162,9 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
         }
         return true
     }
+    /**
+     * Methode um mit empfangenenm Packet im Send Modus umzugehen
+     */
     private fun handleSend(modeLocal:Byte,packageIdLocal:Byte,data:ByteArray):Boolean{
         when(modeLocal){
             DATA_PACKAGE -> {return false}
@@ -141,6 +188,9 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
         return true
     }
 
+    /**
+     * Die Anwendugsschicht meldet den hier das Bedürfnis eine Nachricht zu senden
+     */
     public fun sendMessage(message:ByteArray): Boolean{
         if((sendMessageBuffer!=null) or (modeMain != TCPModes.Idle)){
             Log.d("TCP","Buffer not empty:${sendMessageBuffer!=null}, Mode not Idle ${(modeMain != TCPModes.Idle)}")
@@ -151,10 +201,12 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
         lastPackageId = 0.toByte()
         outboundPackage(byteArrayOf(DATA_PACKAGE,lastPackageId!!) + getPackageData(0))
 
-        
         return true
     }
 
+    /**
+     * Schneidet die Daten für eine bestimmte Packet Id aus dem Send Buffer
+     */
     private fun getPackageData(id:Int):ByteArray{
         if(id>=totalPackages())
             return byteArrayOf()
@@ -163,6 +215,9 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
         return sendMessageBuffer?.copyOfRange(indexStart,indexEnd)!!
     }
 
+    /**
+     * Berechnet in wie viele Packete die Daten im Send Buffer aufgeteilt werden müssen
+     */
     private fun totalPackages(): Int {
         if(sendMessageBuffer == null) return 0
         val dataLen = maxPackageLength-2
@@ -170,6 +225,9 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
         return msgLen!!/dataLen +1
     }
 
+    /**
+     * Speichert das Packet für einen Resend und kümmert sich um den Timeout Timer
+     */
     @OptIn(ExperimentalTime::class)
     private fun outboundPackage(pack:ByteArray){
         lastPackage = pack

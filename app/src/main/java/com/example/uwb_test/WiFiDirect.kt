@@ -23,10 +23,76 @@ class WiFiDirect(private val contextM: Context, private val callback: MainActivi
 
 
     private val STRATEGY = Strategy.P2P_POINT_TO_POINT
+
+
     private var connectionsClient: ConnectionsClient? = null
-    private var connectionLifecycleCallback = MyConnectionLifecycleCallback()
-    private var payloadCallback = MyPayloadCallback()
-    private var endpointDiscoveryCallback = MyEndpointDiscoveryCallback()
+
+    /**
+     * Used by both devices to manage the lifecyle of the active request
+     */
+    private var connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
+        public var endpointId: String? = null
+
+        override fun onConnectionInitiated(endpointIdL: String, connectionInfo: ConnectionInfo) {
+            // Automatically accept the connection request on both ends
+            connectionsClient?.acceptConnection(endpointIdL, payloadCallback)
+        }
+
+        override fun onConnectionResult(endpointIdL: String, result: ConnectionResolution) {
+            if (result.status.isSuccess) {
+                // Connection established! Stop scanning/advertising to save battery
+                connectionsClient?.stopAdvertising()
+                connectionsClient?.stopDiscovery()
+                this.endpointId = endpointIdL
+                // You can now safely pass your data using this endpointId
+                callback.connectionEstablished()
+            }
+        }
+
+        override fun onDisconnected(endpointId: String) {
+            // Handle intentional or unexpected disconnects
+            callback.connectionClosed()
+        }
+    }
+
+    /**
+     * Callback für die Übertragung von Daten
+     */
+    private var payloadCallback = object : PayloadCallback() {
+        override fun onPayloadReceived(endpointId: String, payload: Payload) {
+            if (payload.type == Payload.Type.BYTES) {
+                val receivedBytes: ByteArray? = payload.asBytes()
+                if (receivedBytes != null) {
+                    // Successfully received your custom ByteArray!
+                    val mode:Byte = receivedBytes[0]
+                    var data = receivedBytes.copyOfRange(1,receivedBytes.size)
+                    when(mode){
+                        START_MEASUREMENT -> callback.startMeasuringOrder(RangingTechnology.entries[data[0].toInt()])
+                        REQUEST_MEASUREMENT -> callback.requestMeasuring(RangingTechnology.entries[data[0].toInt()])
+                        STOP_MEASUREMENT -> callback.stopMeasuring()
+                        SHARED_RESULT -> callback.sharedResult(MainActivity.byteArrayToDouble(data))
+                        DATA_PACKAGE -> {callback.messageReceived(data)}
+                    }
+                }
+            }
+        }
+
+        override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
+            // Monitor transfer progress or track completion states
+        }
+    }
+
+    /**
+     * Teilt dem Scanner mit das ein Advertiser gefunden wurde
+     */
+    private var endpointDiscoveryCallback = object : EndpointDiscoveryCallback() {
+        override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
+            // Automatically request a connection to the discovered host
+            connectionsClient?.requestConnection("Pixel 10 Client", endpointId, connectionLifecycleCallback)
+        }
+
+        override fun onEndpointLost(endpointId: String) {}
+    }
 
     init{
 
@@ -81,41 +147,8 @@ class WiFiDirect(private val contextM: Context, private val callback: MainActivi
             // Handle failure
         }
     }
-    // Used by the Discoverer to detect the Advertiser
-    private inner class MyEndpointDiscoveryCallback : EndpointDiscoveryCallback() {
-        override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
-            // Automatically request a connection to the discovered host
-            connectionsClient?.requestConnection("Pixel 10 Client", endpointId, connectionLifecycleCallback)
-        }
 
-        override fun onEndpointLost(endpointId: String) {}
-    }
 
-    // Used by both devices to manage the lifecyle of the active request
-    private inner class MyConnectionLifecycleCallback: ConnectionLifecycleCallback() {
-        public var endpointId: String? = null
-
-        override fun onConnectionInitiated(endpointIdL: String, connectionInfo: ConnectionInfo) {
-            // Automatically accept the connection request on both ends
-            connectionsClient?.acceptConnection(endpointIdL, payloadCallback)
-        }
-
-        override fun onConnectionResult(endpointIdL: String, result: ConnectionResolution) {
-            if (result.status.isSuccess) {
-                // Connection established! Stop scanning/advertising to save battery
-                connectionsClient?.stopAdvertising()
-                connectionsClient?.stopDiscovery()
-                this.endpointId = endpointIdL
-                // You can now safely pass your data using this endpointId
-                callback.connectionEstablished()
-            }
-        }
-
-        override fun onDisconnected(endpointId: String) {
-            // Handle intentional or unexpected disconnects
-            callback.connectionClosed()
-        }
-    }
 
     private fun sendCustomByteArray( mode:Byte, data: ByteArray) {
         if(connectionLifecycleCallback.endpointId==null){
@@ -125,34 +158,6 @@ class WiFiDirect(private val contextM: Context, private val callback: MainActivi
         val payload = Payload.fromBytes(byteArrayOf(mode) + data)
         connectionsClient?.sendPayload(connectionLifecycleCallback.endpointId!!, payload)?.addOnFailureListener { e -> /* Handle send failure */ }
     }
-
-    inner class MyPayloadCallback  : PayloadCallback() {
-        override fun onPayloadReceived(endpointId: String, payload: Payload) {
-            if (payload.type == Payload.Type.BYTES) {
-                val receivedBytes: ByteArray? = payload.asBytes()
-                if (receivedBytes != null) {
-                    // Successfully received your custom ByteArray!
-                    val mode:Byte = receivedBytes[0]
-                    var data = receivedBytes.copyOfRange(1,receivedBytes.size)
-                    when(mode){
-                        START_MEASUREMENT -> callback.startMeasuringOrder(RangingTechnology.entries[data[0].toInt()])
-                        REQUEST_MEASUREMENT -> callback.requestMeasuring(RangingTechnology.entries[data[0].toInt()])
-                        STOP_MEASUREMENT -> callback.stopMeasuring()
-                        SHARED_RESULT -> callback.sharedResult(MainActivity.byteArrayToDouble(data))
-                        DATA_PACKAGE -> {callback.messageReceived(data)}
-                    }
-                }
-            }
-        }
-
-        override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
-            // Monitor transfer progress or track completion states
-        }
-    }
-
-
-
-
 
     override fun sendMessage(data: ByteArray) {
         sendCustomByteArray(DATA_PACKAGE,data)

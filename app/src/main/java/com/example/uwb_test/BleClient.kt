@@ -78,6 +78,9 @@ class BleClient(private val context: Context, private val oobCallback: MainActiv
 
         }
 
+        /**
+         * Hier treffen alle Nachrichten vom anderen Gerät ein
+         */
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         override fun onCharacteristicChanged(
             gatt: BluetoothGatt,
@@ -219,9 +222,6 @@ class BleClient(private val context: Context, private val oobCallback: MainActiv
         bluetoothGatt = device.connectGatt(context, false, gattCallback)
     }
 
-    /**
-     * beendet die Verbindung zum Bluetooth Gerät, Klasse wird geschlossen
-     */
     @SuppressLint("MissingPermission")
     override fun disconnect() {
         tcpAdapter.reset()
@@ -276,7 +276,9 @@ class BleClient(private val context: Context, private val oobCallback: MainActiv
     }
 
 
-
+    /**
+     * Kombiniert den Nachrichten Typ mit der Nutzlast und sendet es an den BLEServer
+     */
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun sendCodedMessage(mode:Byte, data:ByteArray){
         if(data.size>19){
@@ -288,6 +290,9 @@ class BleClient(private val context: Context, private val oobCallback: MainActiv
         sendFinalMessage(sendData)
     }
 
+    /**
+     * Sendet die Daten an den BLEServer
+     */
     private fun sendFinalMessage(data:ByteArray){
         if(data.size>20){
             throw Exception("Data too long")
@@ -299,6 +304,9 @@ class BleClient(private val context: Context, private val oobCallback: MainActiv
         bluetoothGatt?.writeCharacteristic(characteristic, data, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
     }
 
+    /**
+     * Liefert die MAC Adresse des anderen Bluetooth Gerätes zurück
+     */
     override fun getAddress(): String? {
         if(bluetoothGatt!=null){
             return bluetoothGatt?.device?.address

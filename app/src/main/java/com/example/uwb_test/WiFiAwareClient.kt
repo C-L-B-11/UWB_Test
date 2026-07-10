@@ -26,86 +26,8 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
 
     val connectivityManager =
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    private var networkCallback:NetworkCallback? = null
-    private var discoverySessionCallback:MyDiscoverySessionCallback? = null
 
-    init {
-        val awareManager = context.getSystemService(Context.WIFI_AWARE_SERVICE) as WifiAwareManager
-
-        awareManager.attach(object : AttachCallback() {
-            override fun onAttached(session: WifiAwareSession) {
-                awareSession = session
-                subscribe(session)
-            }
-
-            override fun onAttachFailed() {
-                println("Client: Wi-Fi Aware attach failed")
-            }
-        }, null)
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun subscribe(session: WifiAwareSession) {
-        if(!MainActivity.askPermissions(context,*arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.NEARBY_WIFI_DEVICES)))
-            return
-        val config = SubscribeConfig.Builder()
-            .setServiceName(SERVICE_ID)
-            .build()
-
-        discoverySessionCallback = MyDiscoverySessionCallback()
-        session.subscribe(config, discoverySessionCallback!!,null)
-    }
-
-    private fun requestConnection(peerHandle: PeerHandle) {
-        Log.d("WifiAwareClient","Requesting NDP connection")
-
-        val networkSpecifier = WifiAwareNetworkSpecifier.Builder(subscribeSession!!, peerHandle)
-            .setPskPassphrase("SecurePassphrase123")
-            .build()
-
-        val networkRequest = NetworkRequest.Builder()
-            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI_AWARE)
-            .setNetworkSpecifier(networkSpecifier)
-            .build()
-        networkCallback = NetworkCallback()
-        connectivityManager.requestNetwork(networkRequest,networkCallback!! )
-    }
-
-    inner class MyDiscoverySessionCallback() : DiscoverySessionCallback() {
-        override fun onSubscribeStarted(session: SubscribeDiscoverySession) {
-            subscribeSession = session
-            Log.d("WiFiAwareClient","Subscribed, scanning for $SERVICE_ID")
-        }
-
-        override fun onServiceDiscovered(
-            peerHandle: PeerHandle,
-            serviceSpecificInfo: ByteArray?,
-            matchFilter: List<ByteArray>?
-        ) {
-            Log.d("WiFiAwareClient","Server discovered")
-            serverPeerHandle = peerHandle
-
-            // Send an initial message to the server to trigger NDP setup
-            subscribeSession?.sendMessage(
-                peerHandle, 0, byteArrayOf(0)
-            )
-        }
-
-        override fun onMessageReceived(peerHandle: PeerHandle, message: ByteArray) {
-            //Log.d("WiFiAwareClient","Message from server: ${MainActivity.byteToHexString(message)}")
-            val mode:Byte = message[0]
-            val data = message.copyOfRange(1,message.size)
-            when(mode){
-                0.toByte() -> requestConnection(peerHandle)
-                START_MEASUREMENT -> callback.startMeasuringOrder(RangingTechnology.entries[data[0].toInt()])
-                REQUEST_MEASUREMENT -> callback.requestMeasuring(RangingTechnology.entries[data[0].toInt()])
-                STOP_MEASUREMENT -> callback.stopMeasuring()
-                SHARED_RESULT -> callback.sharedResult(MainActivity.byteArrayToDouble(data))
-                DATA_PACKAGE -> {callback.messageReceived(data)}
-            }
-        }
-    }
-    inner class NetworkCallback : ConnectivityManager.NetworkCallback() {
+    private var networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
             Log.d("NetworkCallbackClient","onAvailable")
             val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -142,6 +64,81 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
             Log.d("NetworkCallbackClient","onUnavailable")
             stop()
         }
+    }
+
+
+    private var discoverySessionCallback= object: DiscoverySessionCallback() {
+        override fun onSubscribeStarted(session: SubscribeDiscoverySession) {
+            subscribeSession = session
+            Log.d("WiFiAwareClient","Subscribed, scanning for $SERVICE_ID")
+        }
+
+        override fun onServiceDiscovered(
+            peerHandle: PeerHandle,
+            serviceSpecificInfo: ByteArray?,
+            matchFilter: List<ByteArray>?
+        ) {
+            Log.d("WiFiAwareClient","Server discovered")
+            serverPeerHandle = peerHandle
+
+            // Send an initial message to the server to trigger NDP setup
+            subscribeSession?.sendMessage(
+                peerHandle, 0, byteArrayOf(0)
+            )
+        }
+
+        override fun onMessageReceived(peerHandle: PeerHandle, message: ByteArray) {
+            //Log.d("WiFiAwareClient","Message from server: ${MainActivity.byteToHexString(message)}")
+            val mode:Byte = message[0]
+            val data = message.copyOfRange(1,message.size)
+            when(mode){
+                0.toByte() -> requestConnection(peerHandle)
+                START_MEASUREMENT -> callback.startMeasuringOrder(RangingTechnology.entries[data[0].toInt()])
+                REQUEST_MEASUREMENT -> callback.requestMeasuring(RangingTechnology.entries[data[0].toInt()])
+                STOP_MEASUREMENT -> callback.stopMeasuring()
+                SHARED_RESULT -> callback.sharedResult(MainActivity.byteArrayToDouble(data))
+                DATA_PACKAGE -> {callback.messageReceived(data)}
+            }
+        }
+    }
+
+    init {
+        val awareManager = context.getSystemService(Context.WIFI_AWARE_SERVICE) as WifiAwareManager
+
+        awareManager.attach(object : AttachCallback() {
+            override fun onAttached(session: WifiAwareSession) {
+                awareSession = session
+                subscribe(session)
+            }
+
+            override fun onAttachFailed() {
+                println("Client: Wi-Fi Aware attach failed")
+            }
+        }, null)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun subscribe(session: WifiAwareSession) {
+        if(!MainActivity.askPermissions(context,*arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.NEARBY_WIFI_DEVICES)))
+            return
+        val config = SubscribeConfig.Builder()
+            .setServiceName(SERVICE_ID)
+            .build()
+        session.subscribe(config, discoverySessionCallback,null)
+    }
+
+    private fun requestConnection(peerHandle: PeerHandle) {
+        Log.d("WifiAwareClient","Requesting NDP connection")
+
+        val networkSpecifier = WifiAwareNetworkSpecifier.Builder(subscribeSession!!, peerHandle)
+            .setPskPassphrase("SecurePassphrase123")
+            .build()
+
+        val networkRequest = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI_AWARE)
+            .setNetworkSpecifier(networkSpecifier)
+            .build()
+        connectivityManager.requestNetwork(networkRequest,networkCallback )
     }
 
     private fun runSocketClient(network: Network, serverAddress: InetAddress) {
@@ -212,10 +209,8 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
 
     }
     override fun destroy(){
-        connectivityManager.unregisterNetworkCallback(networkCallback!!)
+        connectivityManager.unregisterNetworkCallback(networkCallback)
         subscribeSession=null
         serverPeerHandle=null
-        networkCallback = null
-        discoverySessionCallback = null
     }
 }
