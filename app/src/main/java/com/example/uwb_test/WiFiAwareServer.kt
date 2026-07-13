@@ -21,15 +21,26 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
 
 
     private var awareSession: WifiAwareSession? = null
+
+    /**
+     * Verbindung über die Daten geschickt werden
+     */
     private var publishSession: PublishDiscoverySession? = null
+
+    /**
+     * "Addresse" des anderen Gerätes
+     */
     private var peerHandle: PeerHandle? = null
 
     val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
+    /**
+     *  ??
+     */
     private var networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
             Log.d("NetworkCallbackServer","onAvailable")
-            Thread { runSocketServer(network) }.start()
+            Thread { runSocketServer() }.start()
         }
         override fun onBlockedStatusChanged(network:Network,blocked:Boolean){
             Log.d("NetworkCallbackServer","onBlockedStatusChanged")
@@ -53,6 +64,9 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
         }
     }
 
+    /**
+     * Callback für den Server zum Melden von gefundenen Clients und deren Nachrichten
+     */
     private var discoverySessionCallback=object : DiscoverySessionCallback() {
         override fun onPublishStarted(session: PublishDiscoverySession) {
             publishSession = session
@@ -65,8 +79,7 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
             val mode:Byte = message[0]
             val data = message.copyOfRange(1,message.size)
             when(mode){
-                0.toByte() ->{acceptConnection(peerHandle)
-
+                0.toByte() ->{acceptConnection(peerHandle)                                      //Handshake
                     publishSession?.sendMessage(peerHandle, 0,byteArrayOf(0))}
                 START_MEASUREMENT -> callback.startMeasuringOrder(RangingTechnology.entries[data[0].toInt()])
                 REQUEST_MEASUREMENT -> callback.requestMeasuring(RangingTechnology.entries[data[0].toInt()])
@@ -93,7 +106,9 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
         }, null)
     }
 
-
+    /**
+     * Veröffentlicht den Service
+     */
     @SuppressLint("MissingPermission")
     private fun publish(session: WifiAwareSession) {
         if(!MainActivity.askPermissions(context,*arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.NEARBY_WIFI_DEVICES)))
@@ -106,6 +121,9 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
         session.publish(config,  discoverySessionCallback,null)
     }
 
+    /**
+     * Akzeptiert die Verbindung von einem anderen Gerät, wird von discoverySessionCallback aufgerufen, wenn eine Handshake Nachricht eingeht
+     */
     private fun acceptConnection(peerHandle2: PeerHandle) {
         Log.d("WifiAwareServer","Accept Connection")
 
@@ -120,10 +138,12 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
             .build()
         connectivityManager.requestNetwork(networkRequest, networkCallback)
     }
-    private fun runSocketServer(network: Network) {
-        // Port 0 lets the OS assign a free port; share the port via message/OOB if needed.
-        // For this example we use a fixed known port.
-        var serverSocket : ServerSocket? = null
+
+    /**
+     * finalisiert den server, wird aufgerufen, wenn onAvailable() vom Network Callback aufgerufen wird
+     */
+    private fun runSocketServer() {
+        var serverSocket : ServerSocket?
         try{
             serverSocket = ServerSocket(8888)
         }catch(e:Exception) {
@@ -152,6 +172,9 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
         serverSocket.close()
     }
 
+    /**
+     * beendet den Server
+     */
     fun stop() {
         publishSession?.close()
         awareSession?.close()
@@ -189,13 +212,22 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
         sendCodedMessage(SHARED_RESULT,MainActivity.doubleToByteArray(distance))
     }
 
+    /**
+     * Kombiniert den Nachrichten Typ mit der Nutzlast und sendet es an das andere Gerät
+     */
     fun sendCodedMessage(mode:Byte,message:ByteArray){
         val data = byteArrayOf(mode)+message
         //Log.d("WifiAwareServer","Sending message: ${MainActivity.byteToHexString(data)}")
         publishSession?.sendMessage(peerHandle!!,0,data)
     }
 
+    /**
+     * gibt alles frei
+     */
     override fun destroy(){
         connectivityManager.unregisterNetworkCallback(networkCallback)
+        awareSession = null
+        publishSession = null
+        peerHandle = null
     }
 }

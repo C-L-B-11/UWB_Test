@@ -266,7 +266,7 @@ open class MainActivity  : AppCompatActivity() {
 
 
     /**
-     * Speichert ereignisse für die Log Datei
+     * Speichert Ereignisse für die log Datei
      */
     private var logEntries :  ArrayList<String>? = null
 

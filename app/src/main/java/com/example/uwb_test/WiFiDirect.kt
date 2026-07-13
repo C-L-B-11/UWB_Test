@@ -28,7 +28,7 @@ class WiFiDirect(private val contextM: Context, private val callback: MainActivi
     private var connectionsClient: ConnectionsClient? = null
 
     /**
-     * Used by both devices to manage the lifecyle of the active request
+     * Gibt informationen über die Verbindung zurück
      */
     private var connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
         public var endpointId: String? = null
@@ -95,8 +95,6 @@ class WiFiDirect(private val contextM: Context, private val callback: MainActivi
     }
 
     init{
-
-
         connectionsClient = Nearby.getConnectionsClient(contextM)
         if(connectionsClient==null){
             Log.d("WifiDirekt", "no Client")
@@ -111,6 +109,9 @@ class WiFiDirect(private val contextM: Context, private val callback: MainActivi
 
     }
 
+    /**
+     * Startet die Veröffentlichung als Advertiser
+     */
     private fun startAdvertising() {
         if(!askPermissions(contextM,*arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION,android.Manifest.permission.NEARBY_WIFI_DEVICES))){
             Log.d("WifiDirekt", "no Permission")
@@ -128,6 +129,10 @@ class WiFiDirect(private val contextM: Context, private val callback: MainActivi
             // Handle failure
         }
     }
+
+    /**
+     * Startet die Suche nach einem Host
+     */
     private fun startDiscovering() {
         if(!askPermissions(contextM,*arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION,android.Manifest.permission.NEARBY_WIFI_DEVICES))){
             Log.d("WifiDirect", "no Permission")
@@ -141,11 +146,7 @@ class WiFiDirect(private val contextM: Context, private val callback: MainActivi
             SERVICE_ID,
             endpointDiscoveryCallback,
             options
-        )?.addOnSuccessListener {
-            // Discovery successfully started, searching for host
-        }?.addOnFailureListener { e ->
-            // Handle failure
-        }
+        )
     }
 
 

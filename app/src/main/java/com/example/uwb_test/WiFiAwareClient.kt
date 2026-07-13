@@ -27,6 +27,9 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
     val connectivityManager =
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
+    /**
+     * ??
+     */
     private var networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
             Log.d("NetworkCallbackClient","onAvailable")
@@ -66,7 +69,9 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
         }
     }
 
-
+    /**
+     * Callback für den Client zum Melden von gefundenen Servern und deren Nachrichten
+     */
     private var discoverySessionCallback= object: DiscoverySessionCallback() {
         override fun onSubscribeStarted(session: SubscribeDiscoverySession) {
             subscribeSession = session
@@ -92,7 +97,7 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
             val mode:Byte = message[0]
             val data = message.copyOfRange(1,message.size)
             when(mode){
-                0.toByte() -> requestConnection(peerHandle)
+                0.toByte() -> requestConnection(peerHandle)  //Handshake
                 START_MEASUREMENT -> callback.startMeasuringOrder(RangingTechnology.entries[data[0].toInt()])
                 REQUEST_MEASUREMENT -> callback.requestMeasuring(RangingTechnology.entries[data[0].toInt()])
                 STOP_MEASUREMENT -> callback.stopMeasuring()
@@ -117,6 +122,9 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
         }, null)
     }
 
+    /**
+     * Startet das Suchen nach einem Server
+     */
     @SuppressLint("MissingPermission")
     private fun subscribe(session: WifiAwareSession) {
         if(!MainActivity.askPermissions(context,*arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.NEARBY_WIFI_DEVICES)))
@@ -127,6 +135,9 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
         session.subscribe(config, discoverySessionCallback,null)
     }
 
+    /**
+     *
+     */
     private fun requestConnection(peerHandle: PeerHandle) {
         Log.d("WifiAwareClient","Requesting NDP connection")
 
@@ -210,7 +221,8 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
     }
     override fun destroy(){
         connectivityManager.unregisterNetworkCallback(networkCallback)
-        subscribeSession=null
-        serverPeerHandle=null
+        awareSession = null
+        subscribeSession = null
+        serverPeerHandle = null
     }
 }
