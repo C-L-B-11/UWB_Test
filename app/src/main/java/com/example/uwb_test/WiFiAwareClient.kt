@@ -28,7 +28,7 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
     /**
-     * ??
+     * Verbindungs Callback
      */
     private var networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
@@ -136,7 +136,7 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
     }
 
     /**
-     *
+     * Fragt nach einer Verbindung zum Server
      */
     private fun requestConnection(peerHandle: PeerHandle) {
         Log.d("WifiAwareClient","Requesting NDP connection")
@@ -152,6 +152,9 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
         connectivityManager.requestNetwork(networkRequest,networkCallback )
     }
 
+    /**
+     * Kontaktiert Server sobald eine Verbindung aufgebaut wurde (aufgerufen von networkCallback.onAvailable())
+     */
     private fun runSocketClient(network: Network, serverAddress: InetAddress) {
         Log.d("WiFiAwareClient","Connecting to $serverAddress:8888")
 
@@ -178,8 +181,10 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
         socket.close()
     }
 
+    /**
+     * beendet den Client
+     */
     fun stop() {
-
         subscribeSession?.close()
         awareSession?.close()
     }
@@ -213,12 +218,19 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
         sendCodedMessage(SHARED_RESULT,MainActivity.doubleToByteArray(distance))
     }
 
+    /**
+     * Kombiniert den Nachrichten Typ mit der Nutzlast und sendet es an das andere Gerät
+     */
     fun sendCodedMessage(mode:Byte,message:ByteArray){
         val data = byteArrayOf(mode)+message
         //Log.d("WifiAwareClient","Sending message: ${MainActivity.byteToHexString(data)}")
         subscribeSession?.sendMessage(serverPeerHandle!!,0,data)
 
     }
+
+    /**
+     * gibt alles frei
+     */
     override fun destroy(){
         connectivityManager.unregisterNetworkCallback(networkCallback)
         awareSession = null
