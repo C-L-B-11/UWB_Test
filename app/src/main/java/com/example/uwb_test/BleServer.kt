@@ -92,8 +92,9 @@ class BleServer(private val context : Context, private val callback : MainActivi
             offset: Int,
             value: ByteArray
         ) {
-            //Log.d("BLE_SERVER", "recvFragment: ${MainActivity.byteToHexString(value)}")
-
+            Log.d("BLE_SERVER", "recvFragment: ${MainActivity.byteToHexString(value)}")
+            if(value.size==0)
+                return;
             val mode:Byte = value[0]
             var data = value.copyOfRange(1,value.size)
             if (responseNeeded) {

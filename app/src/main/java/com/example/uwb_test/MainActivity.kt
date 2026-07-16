@@ -81,6 +81,79 @@ open class MainActivity  : AppCompatActivity() {
     private var rgTecOOB: RadioGroup? = null
     private var rgTecRANG: RadioGroup? = null
 
+
+    private val uiMode = object {
+        private var mode = UiMode.Idle
+
+        fun startConnecting(){
+            if(mode!=UiMode.Idle)
+                return
+            mode = UiMode.Connecting
+
+            runOnUiThread {
+                connectButton?.isEnabled = false
+                disconnectButton?.isEnabled = true
+                swIsController?.isEnabled = false
+                toggleRadioGroup(rgTecOOB!!, false)
+            }
+        }
+        fun connected(){
+            if(mode!=UiMode.Connecting&&mode!=UiMode.Idle)
+                return
+            mode = UiMode.Connected
+            runOnUiThread {
+                startMeasuringButton?.isEnabled=true
+                connectButton?.isEnabled = false
+                disconnectButton?.isEnabled = true
+                swIsController?.isEnabled = false
+                toggleRadioGroup(rgTecOOB!!, false)
+            }
+        }
+        fun startedMeasuring(){
+            if(mode!=UiMode.Connected)
+                return
+            mode = UiMode.Measuring
+
+            runOnUiThread {
+                startMeasuringButton?.isEnabled = false
+                stopMeasuringButton?.isEnabled = true
+                disconnectButton?.isEnabled = false
+                toggleRadioGroup(rgTecRANG!!,false)
+                swMakeLog?.isEnabled = false
+            }
+        }
+        fun stoppedMeasuring(){
+            if(mode!= UiMode.Measuring)
+                return
+            mode = UiMode.Connected
+            runOnUiThread {
+                stopMeasuringButton?.isEnabled = false
+                startMeasuringButton?.isEnabled = true
+                disconnectButton?.isEnabled = true
+
+                swMakeLog?.isEnabled = true
+                toggleRadioGroup(rgTecRANG!!,true)
+            }
+        }
+        fun disconnected(){
+            if(mode == UiMode.Idle)
+                return
+            mode = UiMode.Idle
+
+            runOnUiThread {
+                connectButton?.isEnabled = true
+                disconnectButton?.isEnabled = false
+                startMeasuringButton?.isEnabled = false
+                stopMeasuringButton?.isEnabled = false
+                swIsController?.isEnabled = true
+                toggleRadioGroup(rgTecOOB!!,true)
+                exception?.text =""
+            }
+        }
+    }
+
+
+
     /**
     *   Objekt das die OOB Verbindung zum anderen Gerät steuert und unterhält
     */
@@ -129,10 +202,7 @@ open class MainActivity  : AppCompatActivity() {
          */
         override fun connectionEstablished() {
             Log.d("TransportHandle","connection established")
-            runOnUiThread {
-                startMeasuringButton?.isEnabled=true
-
-            }
+            uiMode.connected()
             rangingManager?.registerCapabilitiesCallback(myExecutor,capabilitiesCallback)
         }
         /**
@@ -143,7 +213,7 @@ open class MainActivity  : AppCompatActivity() {
             rangingSession?.close()
             oobConnector?.destroy()
             oobConnector = null
-            disconnected()
+            uiMode.disconnected()
             rangingManager?.unregisterCapabilitiesCallback(capabilitiesCallback)
 
         }
@@ -175,7 +245,7 @@ open class MainActivity  : AppCompatActivity() {
          */
         override fun stopMeasuring() {
             if(rangingSession!=null)
-                rangingSession?.close()
+                rangingSession?.stop()
         }
         /**
          * Member von OOBConnectionCallback
@@ -204,7 +274,7 @@ open class MainActivity  : AppCompatActivity() {
     private var rangingSession : RangingSession? = null
 
     /**
-     *
+     *  gibt Ergebnisse und Status des Rangings zurück
      */
     private val myRangingSessionCallback = object : RangingSession.Callback{
         override fun onClosed(p0: Int) {
@@ -225,7 +295,7 @@ open class MainActivity  : AppCompatActivity() {
 
         override fun onOpened() {
             Log.d("RangingResult","onOpened")
-            startedMeasuring()
+            uiMode.startedMeasuring()
         }
 
         override fun onResults(p0: RangingDevice, p1: RangingData) {
@@ -368,14 +438,7 @@ open class MainActivity  : AppCompatActivity() {
             rangingSession?.stop()
         }
         else{
-            runOnUiThread {
-                stopMeasuringButton?.isEnabled = false
-                startMeasuringButton?.isEnabled = true
-                disconnectButton?.isEnabled = true
-
-                swMakeLog?.isEnabled = true
-                toggleRadioGroup(rgTecRANG!!,true)
-            }
+            uiMode.stoppedMeasuring()
             if(swMakeLog?.isChecked == true && logEntries!=null)
             {
                 safeLog()
@@ -392,19 +455,6 @@ open class MainActivity  : AppCompatActivity() {
         }
         else{
             startMeasuring()
-        }
-    }
-
-    /**
-     * Rückruf für den Fall, dass das Ranging tatsächlich gestartet wurde. Wird von MyRangingSessionCallback(onOpend()) aufgerufen
-     */
-    private fun startedMeasuring(){
-        runOnUiThread {
-            startMeasuringButton?.isEnabled = false
-            stopMeasuringButton?.isEnabled = true
-            disconnectButton?.isEnabled = false
-            toggleRadioGroup(rgTecRANG!!,false)
-            swMakeLog?.isEnabled = false
         }
     }
 
@@ -560,21 +610,6 @@ open class MainActivity  : AppCompatActivity() {
     }
 
     /**
-     * versetzt die UI nach trennung der Verbindung in den Ausgangszustand. Wird vom transportHandle callback aufgerufen
-     */
-    private fun disconnected(){
-        runOnUiThread {
-            connectButton?.isEnabled = true
-            disconnectButton?.isEnabled = false
-            startMeasuringButton?.isEnabled = false
-            stopMeasuringButton?.isEnabled = false
-            swIsController?.isEnabled = true
-            toggleRadioGroup(rgTecOOB!!,true)
-            exception?.text =""
-        }
-    }
-
-    /**
      * startet die OOB Verbindung. Wird vom User ausgelöst
      */
     private fun connect() {
@@ -595,12 +630,7 @@ open class MainActivity  : AppCompatActivity() {
                 WiFiAwareClient(this,transportHandle as OobConnectionCallback)
             }
         }
-        runOnUiThread {
-            connectButton?.isEnabled = false
-            disconnectButton?.isEnabled = true
-            swIsController?.isEnabled = false
-            toggleRadioGroup(rgTecOOB!!, false)
-        }
+        uiMode.startConnecting()
     }
 
     /**
@@ -704,7 +734,7 @@ open class MainActivity  : AppCompatActivity() {
 
     public interface OobConnectionCallback{
         /**
-         * Verbindung wurde erfolgreich Aufgebaut, es kann kommuniziert werden
+         * Verbindung wurde erfolgreich aufgebaut, es kann kommuniziert werden
          */
         abstract fun connectionEstablished()
 
@@ -785,6 +815,10 @@ open class MainActivity  : AppCompatActivity() {
         logEntries = null
     }
 
+
+    /**
+     * Datei wird unter angegebner URI gespeichert
+     */
     private fun writeContentToUri(uri: Uri) {
         try {
             contentResolver.openOutputStream(uri)?.use { outputStream ->
@@ -799,6 +833,10 @@ open class MainActivity  : AppCompatActivity() {
             runOnUiThread{Toast.makeText(this, "Error saving: ${e.message}", Toast.LENGTH_LONG).show()}
         }
         logEntries = null
+    }
+
+    private enum class UiMode{
+        Idle, Connecting,Connected,Measuring
     }
 
     /**
@@ -827,7 +865,7 @@ open class MainActivity  : AppCompatActivity() {
 
     companion object {
         /**
-         * Einheitliche Methode um Berechtigungen zu prüfen und ggf. zu fragen
+         * Einheitliche Methode um Berechtigungen zu prüfen und ggf. zu erfragen
          */
         fun askPermissions(context: Context, vararg permissions: String): Boolean {
             val activity = context as? Activity
