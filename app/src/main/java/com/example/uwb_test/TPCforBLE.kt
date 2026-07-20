@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.Queue
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
@@ -28,7 +29,7 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
     private val sendPackageFunction = sendPcktFunc_
 
     /**
-     * Callback Methode um eine fertig empfangene Nachricht zurückzugeben (Rückruf für Anwendugsschicht)
+     * Callback Methode um eine fertig empfangene Nachricht zurückzugeben (Rückruf für Anwendungsschicht)
      */
     private val receivedMessageFunction = recvMsgFunc_
 
@@ -36,6 +37,8 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
      * Buffer für die Übertragung einer Nachricht
      */
     private var sendMessageBuffer:ByteArray? = null
+
+    private var sendMessageBufferQueue: ArrayDeque<ByteArray> = ArrayDeque()
 
     /**
      * Buffer für die empfangene Nachricht
@@ -48,7 +51,7 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
     private var modeMain : TCPModes = TCPModes.Idle
 
     /**
-     * Nummer des Packetes, das zuletzt empfangen oder gesendet Wurde
+     * Nummer des Paketes, das zuletzt empfangen oder gesendet Wurde
      */
     private var lastPackageId : Byte? = null
 
@@ -76,7 +79,7 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
     }
 
     /**
-     * die Übertragungsschicht meldet den hier den Empfang eines Packetes
+     * die Übertragungsschicht meldet den hier den Empfang eines Paketes
      */
     public fun receivedPackage(rPackage:ByteArray):Boolean {
         if(rPackage.size<2)
@@ -106,7 +109,7 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
     }
 
     /**
-     * Methode um mit empfangenenm Packet im Idle Modus umzugehen
+     * Methode um mit empfangenem Packet im Idle Modus umzugehen
      */
     private fun handleIdle(modeLocal:Byte,packageIdLocal:Byte,data:ByteArray):Boolean{
         when(modeLocal){
@@ -133,7 +136,7 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
     }
 
     /**
-     * Methode um mit empfangenenm Packet im Receive Modus umzugehen
+     * Methode um mit empfangenem Packet im Receive Modus umzugehen
      */
     private fun handleReceive(modeLocal:Byte, packageIdLocal:Byte, data:ByteArray):Boolean{
         when(modeLocal){
@@ -157,13 +160,16 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
                 receivedMessageFunction(recvMessageBuffer!!)
                 recvMessageBuffer = null
                 lastPackageId = null
-
+                if(sendMessageBufferQueue.isNotEmpty()){
+                    sendMessageBuffer = sendMessageBufferQueue.removeFirst()
+                    initSend()
+                }
             }
         }
         return true
     }
     /**
-     * Methode um mit empfangenenm Packet im Send Modus umzugehen
+     * Methode um mit empfangenem Packet im Send Modus umzugehen
      */
     private fun handleSend(modeLocal:Byte,packageIdLocal:Byte,data:ByteArray):Boolean{
         when(modeLocal){
@@ -183,29 +189,37 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
                 sendMessageBuffer = null
                 lastPackageId = null
                 modeMain = TCPModes.Idle
+                if(sendMessageBufferQueue.isNotEmpty()){
+                    sendMessageBuffer = sendMessageBufferQueue.removeFirst()
+                    initSend()
+                }
             }
         }
         return true
     }
 
     /**
-     * Die Anwendugsschicht meldet den hier das Bedürfnis eine Nachricht zu senden
+     * Die Anwendungsschicht meldet hier das Bedürfnis, eine Nachricht zu senden
      */
     public fun sendMessage(message:ByteArray): Boolean{
         if((sendMessageBuffer!=null) or (modeMain != TCPModes.Idle)){
-            Log.d("TCP","Buffer not empty:${sendMessageBuffer!=null}, Mode not Idle ${(modeMain != TCPModes.Idle)}")
-            return false
+            Log.d("TCP","Message Added to queue")
+            sendMessageBufferQueue.add(message)
+            return true
         }
-        modeMain = TCPModes.Send
         sendMessageBuffer = message
-        lastPackageId = 0.toByte()
-        outboundPackage(byteArrayOf(DATA_PACKAGE,lastPackageId!!) + getPackageData(0))
-
+        initSend()
         return true
     }
 
+    private fun initSend(){
+        modeMain = TCPModes.Send
+        lastPackageId = 0.toByte()
+        outboundPackage(byteArrayOf(DATA_PACKAGE,lastPackageId!!) + getPackageData(0))
+    }
+
     /**
-     * Schneidet die Daten für eine bestimmte Packet Id aus dem Send Buffer
+     * Schneidet die Daten für eine bestimmte Paket Id aus dem Send Buffer
      */
     private fun getPackageData(id:Int):ByteArray{
         if(id>=totalPackages())
@@ -216,7 +230,7 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
     }
 
     /**
-     * Berechnet in wie viele Packete die Daten im Send Buffer aufgeteilt werden müssen
+     * Berechnet in wie viele Pakete die Daten im Send Buffer aufgeteilt werden müssen
      */
     private fun totalPackages(): Int {
         if(sendMessageBuffer == null) return 0

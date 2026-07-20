@@ -92,24 +92,20 @@ class BleServer(private val context : Context, private val callback : MainActivi
             offset: Int,
             value: ByteArray
         ) {
-            Log.d("BLE_SERVER", "recvFragment: ${MainActivity.byteToHexString(value)}")
-            if(value.size==0)
-                return;
-            val mode:Byte = value[0]
-            var data = value.copyOfRange(1,value.size)
+            //Log.d("BLE_SERVER", "recvFragment: ${MainActivity.byteToHexString(value)}")
             if (responseNeeded) {
                 gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
             }
-            when(mode){
-                START_MEASUREMENT -> callback.startMeasuringOrder(RangingTechnology.entries[data[0].toInt()])
-                REQUEST_MEASUREMENT -> callback.requestMeasuring(RangingTechnology.entries[data[0].toInt()])
-                STOP_MEASUREMENT -> callback.stopMeasuring()
-                SHARED_RESULT -> callback.sharedResult(MainActivity.byteArrayToDouble(data))
-                else -> if(!tcpAdapter.receivedPackage(value)) {
+            val mode = value[0]
+            if(mode==SHARED_RESULT){
+                callback.messageReceived(value)
+            }
+            else
+                if(!tcpAdapter.receivedPackage(value)) {
                     Log.d("BLE_SERVER", "tcpAdapter failed to process")
                     callback.statusMessage("Communication error")
                 }
-            }
+
         }
 
 
@@ -197,28 +193,13 @@ class BleServer(private val context : Context, private val callback : MainActivi
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    override fun startMeasuring(mode:RangingTechnology) {
-        sendCodedMessage(START_MEASUREMENT,byteArrayOf(mode.ordinal.toByte()))
-    }
-
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    override fun requestMeasuring(mode: MainActivity.RangingTechnology) {
-        sendCodedMessage(REQUEST_MEASUREMENT,byteArrayOf(mode.ordinal.toByte()))
-    }
-
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    override fun shareResult(distance: Double) {
-        sendCodedMessage(SHARED_RESULT,MainActivity.doubleToByteArray(distance))
-    }
-
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    override fun stopMeasuring() {
-        sendCodedMessage(STOP_MEASUREMENT,ByteArray(0))
-    }
-
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun sendMessage(data:ByteArray) {
         //Log.d("BLE_SERVER","send message: ${MainActivity.byteToHexString(data)}")
+        val mode = data[0]
+        if(mode==SHARED_RESULT){
+            sendFinalMessage(data)
+        }
+        else
         if(!tcpAdapter.sendMessage(data)){
             Log.d("BLE_Server","Sending through tcp failed")
             callback.statusMessage("Communication error")

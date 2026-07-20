@@ -64,15 +64,7 @@ class WiFiDirect(private val contextM: Context, private val callback: MainActivi
                 val receivedBytes: ByteArray? = payload.asBytes()
                 if (receivedBytes != null) {
                     // Successfully received your custom ByteArray!
-                    val mode:Byte = receivedBytes[0]
-                    var data = receivedBytes.copyOfRange(1,receivedBytes.size)
-                    when(mode){
-                        START_MEASUREMENT -> callback.startMeasuringOrder(RangingTechnology.entries[data[0].toInt()])
-                        REQUEST_MEASUREMENT -> callback.requestMeasuring(RangingTechnology.entries[data[0].toInt()])
-                        STOP_MEASUREMENT -> callback.stopMeasuring()
-                        SHARED_RESULT -> callback.sharedResult(MainActivity.byteArrayToDouble(data))
-                        DATA_PACKAGE -> {callback.messageReceived(data)}
-                    }
+                    callback.messageReceived(receivedBytes)
                 }
             }
         }
@@ -150,18 +142,13 @@ class WiFiDirect(private val contextM: Context, private val callback: MainActivi
     }
 
 
-
-    private fun sendCustomByteArray( mode:Byte, data: ByteArray) {
+    override fun sendMessage(data: ByteArray) {
         if(connectionLifecycleCallback.endpointId==null){
             Log.d("WifiDirekt", "Can not send Data, no endpointId")
             return
         }
-        val payload = Payload.fromBytes(byteArrayOf(mode) + data)
+        val payload = Payload.fromBytes(data)
         connectionsClient?.sendPayload(connectionLifecycleCallback.endpointId!!, payload)?.addOnFailureListener { e -> /* Handle send failure */ }
-    }
-
-    override fun sendMessage(data: ByteArray) {
-        sendCustomByteArray(DATA_PACKAGE,data)
     }
 
     override fun isInitiator(): Boolean {
@@ -172,21 +159,5 @@ class WiFiDirect(private val contextM: Context, private val callback: MainActivi
         if(connectionLifecycleCallback.endpointId!=null)
             connectionsClient?.disconnectFromEndpoint(connectionLifecycleCallback.endpointId!!)
         callback.connectionClosed()
-    }
-
-    override fun startMeasuring(mode:RangingTechnology) {
-        sendCustomByteArray(START_MEASUREMENT,byteArrayOf(mode.ordinal.toByte()))
-    }
-
-    override fun requestMeasuring(mode:RangingTechnology) {
-        sendCustomByteArray(REQUEST_MEASUREMENT,byteArrayOf(mode.ordinal.toByte()))
-    }
-
-    override fun stopMeasuring() {
-        sendCustomByteArray(STOP_MEASUREMENT,byteArrayOf(0))
-    }
-
-    override fun shareResult(distance: Double) {
-        sendCustomByteArray(SHARED_RESULT,MainActivity.doubleToByteArray(distance))
     }
 }

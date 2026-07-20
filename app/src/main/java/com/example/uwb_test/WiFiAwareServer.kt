@@ -77,15 +77,10 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
             //Log.d("WiFiAwareServer","MessageFromClient: ${MainActivity.byteToHexString(message)}")
 
             val mode:Byte = message[0]
-            val data = message.copyOfRange(1,message.size)
             when(mode){
                 0.toByte() ->{acceptConnection(peerHandle)                                      //Handshake
                     publishSession?.sendMessage(peerHandle, 0,byteArrayOf(0))}
-                START_MEASUREMENT -> callback.startMeasuringOrder(RangingTechnology.entries[data[0].toInt()])
-                REQUEST_MEASUREMENT -> callback.requestMeasuring(RangingTechnology.entries[data[0].toInt()])
-                STOP_MEASUREMENT -> callback.stopMeasuring()
-                SHARED_RESULT -> callback.sharedResult(MainActivity.byteArrayToDouble(data))
-                DATA_PACKAGE -> {callback.messageReceived(data)}
+                else -> {callback.messageReceived(message)}
             }
 
         }
@@ -181,7 +176,8 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
     }
 
     override fun sendMessage(data: ByteArray) {
-        sendCodedMessage(DATA_PACKAGE,data)
+        //Log.d("WifiAwareServer","Sending message: ${MainActivity.byteToHexString(data)}")
+        publishSession?.sendMessage(peerHandle!!,0,data)
     }
 
     override fun isInitiator(): Boolean {
@@ -190,35 +186,6 @@ class WiFiAwareServer(private val context: Context, private val callback: MainAc
 
     override fun disconnect() {
         stop()
-    }
-
-
-    override fun startMeasuring(mode:RangingTechnology) {
-        sendCodedMessage(START_MEASUREMENT,byteArrayOf(mode.ordinal.toByte()))
-    }
-
-
-    override fun requestMeasuring(mode:RangingTechnology) {
-        sendCodedMessage(REQUEST_MEASUREMENT,byteArrayOf(mode.ordinal.toByte()))
-    }
-
-
-    override fun stopMeasuring() {
-        sendCodedMessage(STOP_MEASUREMENT,ByteArray(0))
-    }
-
-
-    override fun shareResult(distance: Double) {
-        sendCodedMessage(SHARED_RESULT,MainActivity.doubleToByteArray(distance))
-    }
-
-    /**
-     * Kombiniert den Nachrichten Typ mit der Nutzlast und sendet es an das andere Gerät
-     */
-    fun sendCodedMessage(mode:Byte,message:ByteArray){
-        val data = byteArrayOf(mode)+message
-        //Log.d("WifiAwareServer","Sending message: ${MainActivity.byteToHexString(data)}")
-        publishSession?.sendMessage(peerHandle!!,0,data)
     }
 
     /**

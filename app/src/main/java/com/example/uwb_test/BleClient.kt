@@ -88,17 +88,14 @@ class BleClient(private val context: Context, private val oobCallback: MainActiv
             value:ByteArray
         ) {
             //Log.d("BLE_CLIENT", "recvFragment:${MainActivity.byteToHexString(value)}")
+            val mode = value[0]
+            if(mode==SHARED_RESULT){
+                oobCallback.messageReceived(value)
+            }
+            else
+            if (!tcpAdapter.receivedPackage(value)) {
+                oobCallback.statusMessage("Communication error")
 
-            val mode:Byte = value[0]
-            var data = value.copyOfRange(1,value.size)
-            when(mode){
-                START_MEASUREMENT -> oobCallback.startMeasuringOrder(RangingTechnology.entries[data[0].toInt()])
-                REQUEST_MEASUREMENT -> oobCallback.requestMeasuring(RangingTechnology.entries[data[0].toInt()])
-                STOP_MEASUREMENT -> oobCallback.stopMeasuring()
-                SHARED_RESULT -> oobCallback.sharedResult(MainActivity.byteArrayToDouble(data))
-                else -> if(!tcpAdapter.receivedPackage(value)){
-                    oobCallback.statusMessage("Communication error")
-                }
             }
         }
     }
@@ -240,31 +237,13 @@ class BleClient(private val context: Context, private val oobCallback: MainActiv
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    override fun startMeasuring(mode:RangingTechnology) {
-        sendCodedMessage(START_MEASUREMENT,byteArrayOf(mode.ordinal.toByte()))
-    }
-
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    override fun requestMeasuring(mode:RangingTechnology) {
-        sendCodedMessage(REQUEST_MEASUREMENT,byteArrayOf(mode.ordinal.toByte()))
-    }
-
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    override fun stopMeasuring() {
-        sendCodedMessage(STOP_MEASUREMENT,ByteArray(0))
-    }
-
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    override fun shareResult(distance: Double) {
-        sendCodedMessage(SHARED_RESULT,MainActivity.doubleToByteArray(distance))
-    }
-
-
-
-
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun sendMessage(data: ByteArray) {
         //Log.d("BLE_CLIENT","send message: ${MainActivity.byteToHexString(data)}")
+        val mode = data[0]
+        if(mode==SHARED_RESULT){
+            sendFinalMessage(data)
+        }
+        else
         if(!tcpAdapter.sendMessage(data)){
             Log.d("BLE_CLIENT","Sending through tcp failed")
             oobCallback.statusMessage("Communication error")
@@ -273,21 +252,6 @@ class BleClient(private val context: Context, private val oobCallback: MainActiv
 
     override fun isInitiator(): Boolean {
         return false
-    }
-
-
-    /**
-     * Kombiniert den Nachrichten Typ mit der Nutzlast und sendet es an den BLEServer
-     */
-    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    private fun sendCodedMessage(mode:Byte, data:ByteArray){
-        if(data.size>19){
-            throw Exception("Data too long")
-        }
-        var sendData = ByteArray(1)
-        sendData[0]=mode
-        sendData += data
-        sendFinalMessage(sendData)
     }
 
     /**

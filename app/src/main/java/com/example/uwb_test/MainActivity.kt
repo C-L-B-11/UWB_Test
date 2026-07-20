@@ -5,6 +5,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothGatt
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -46,6 +47,7 @@ import kotlinx.datetime.toLocalDateTime
 import java.util.UUID
 
 import java.util.concurrent.Executor
+import kotlin.byteArrayOf
 import kotlin.experimental.and
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -189,7 +191,7 @@ open class MainActivity  : AppCompatActivity() {
         override fun sendData(p0: ByteArray) {
             val s = byteToHexString(p0)
             Log.d("TransportHandle","sending message $s")
-            oobConnector?.sendMessage(p0)
+            oobConnector?.sendMessage(constructMessage(DATA_PACKAGE, p0))
         }
         /**
          * Member von TransportHandle
@@ -217,40 +219,58 @@ open class MainActivity  : AppCompatActivity() {
             rangingManager?.unregisterCapabilitiesCallback(capabilitiesCallback)
 
         }
+
         /**
          * Member von OOBConnectionCallback
          */
         override fun messageReceived(data: ByteArray) {
             val s = byteToHexString(data)
             Log.d("TransportHandle","message Received $s")
-            if(callbackExecuter!= null)
-                callbackExecuter?.run {callbackFunction?.onReceiveData(data)  }
+
+            if(data.size==0)
+                return;
+            val mode:Byte = data[0]
+            var data = data.copyOfRange(1,data.size)
+            when(mode){
+                START_MEASUREMENT -> startMeasuringOrder(RangingTechnology.entries[data[0].toInt()])
+                REQUEST_MEASUREMENT -> requestMeasuring(RangingTechnology.entries[data[0].toInt()])
+                STOP_MEASUREMENT -> stopMeasuring()
+                SHARED_RESULT -> sharedResult(byteArrayToDouble(data))
+                DATA_PACKAGE -> {
+                    if(callbackExecuter!= null)
+                        callbackExecuter?.run {callbackFunction?.onReceiveData(data)  }
+                }
+                else ->  {
+                    Log.d("OOB","Unknown message")
+                }
+            }
         }
+
         /**
          * Member von OOBConnectionCallback
          */
-        override fun startMeasuringOrder(mode:RangingTechnology) {
+        fun startMeasuringOrder(mode:RangingTechnology) {
             setRangingTechnology(mode)
             startMeasuring()
         }
         /**
          * Member von OOBConnectionCallback
          */
-        override fun requestMeasuring(mode:RangingTechnology) {
+        fun requestMeasuring(mode:RangingTechnology) {
             setRangingTechnology(mode)
             startMeasuringBtn()
         }
         /**
          * Member von OOBConnectionCallback
          */
-        override fun stopMeasuring() {
+        fun stopMeasuring() {
             if(rangingSession!=null)
                 rangingSession?.stop()
         }
         /**
          * Member von OOBConnectionCallback
          */
-        override fun sharedResult(distance: Double) {
+        fun sharedResult(distance: Double) {
             gotResult(distance)
         }
         /**
@@ -303,7 +323,7 @@ open class MainActivity  : AppCompatActivity() {
             val distance = p1.distance?.measurement
             if(distance!=null) {
                 gotResult(distance)
-                oobConnector?.shareResult(distance)
+                oobConnector?.sendMessage(constructMessage(SHARED_RESULT,doubleToByteArray(distance)))
             }
         }
 
@@ -425,7 +445,7 @@ open class MainActivity  : AppCompatActivity() {
      */
     private fun stopMeasuringBtn()
     {
-        oobConnector?.stopMeasuring()
+        oobConnector?.sendMessage(byteArrayOf(STOP_MEASUREMENT))
         stopMeasuring()
     }
 
@@ -451,7 +471,7 @@ open class MainActivity  : AppCompatActivity() {
      */
     private fun startMeasuringBtn(){
         if(swIsController?.isChecked==true){
-            oobConnector?.requestMeasuring(rangingMode)
+            oobConnector?.sendMessage(byteArrayOf(REQUEST_MEASUREMENT,rangingMode.ordinal.toByte()))
         }
         else{
             startMeasuring()
@@ -587,7 +607,7 @@ open class MainActivity  : AppCompatActivity() {
 
         if(swIsController?.isChecked == false)//normally false in case of only OOB
         {
-            oobConnector?.startMeasuring(rangingMode)
+            oobConnector?.sendMessage(byteArrayOf(START_MEASUREMENT,rangingMode.ordinal.toByte()))
         }
 
         if(swMakeLog?.isChecked == true){
@@ -708,22 +728,22 @@ open class MainActivity  : AppCompatActivity() {
         /**
          * Initiator befiehlt dem Responder die Messung zu starten
          */
-        abstract fun startMeasuring(mode:RangingTechnology)
+
 
         /**
          * Responder bittet den Initiator die Messung zu starten
          */
-        abstract fun requestMeasuring(mode:RangingTechnology)
+
 
         /**
          * befiehlt der Gegenseite das Ranging zu beenden, ruft stopMeasuring() beim Callback der Gegenseite auf
          */
-        abstract fun stopMeasuring()
+
 
         /**
          * teilt das ermittelte Resultat mit der Gegenseite, ruft sharedResult() beim Callback der Gegenseite auf
          */
-        abstract fun shareResult(distance: Double)
+
 
         /**
          *  Kann von OOB implementierungen genutzt werden um Speicher oder Ports frei zu geben
@@ -749,30 +769,11 @@ open class MainActivity  : AppCompatActivity() {
         abstract fun messageReceived(data:ByteArray)
 
         /**
-         * Der Initiator befiehlt dem Responder die Messung zu starten
-         */
-        abstract fun startMeasuringOrder(mode:RangingTechnology)
-
-        /**
-         * Der Responder möchte, dass der Initiator die Messung startet
-         */
-        abstract fun requestMeasuring(mode:RangingTechnology)
-
-        /**
-         * Die Messung soll beendet werden
-         */
-        abstract fun stopMeasuring()
-
-        /**
-         * Der Initiator teilt ein Messergebnis mit dem Responder
-         */
-        abstract fun sharedResult(distance: Double)
-
-        /**
          * Eine Statusmeldung von der OOBConnection wird übergeben
          */
         abstract fun statusMessage(message:String)
     }
+
 
     /**
      * Generiert einen String mit aktuellem Datum und Zeit
@@ -963,6 +964,12 @@ open class MainActivity  : AppCompatActivity() {
                 acc or ((b.toLong() and 0xFF) shl (56 - i * 8))
             }
             return java.lang.Double.longBitsToDouble(bits)
+        }
+
+        fun constructMessage(mode:Byte, data: ByteArray):ByteArray{
+            var sendData = byteArrayOf(mode)
+            sendData += data
+            return sendData
         }
     }
 
