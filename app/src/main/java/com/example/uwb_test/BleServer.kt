@@ -22,7 +22,7 @@ import com.example.uwb_test.MainActivity.RangingTechnology
 
 
 @SuppressLint("MissingPermission")
-class BleServer(private val context : Context, private val callback : MainActivity.OobConnectionCallback): BLESuper {
+class BleServer(private val context : Context, private val callback : MainActivity.OobConnectionCallback): BLESuper() {
 
     private val bluetoothManager =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager

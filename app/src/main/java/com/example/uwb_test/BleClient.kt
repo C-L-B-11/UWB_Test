@@ -24,7 +24,7 @@ import java.util.Collections
 
 
 @SuppressLint("MissingPermission")
-class BleClient(private val context: Context, private val oobCallback: MainActivity.OobConnectionCallback, private val view: View):BLESuper {
+class BleClient(private val context: Context, private val oobCallback: MainActivity.OobConnectionCallback, private val view: View): MainActivity.OobConnection, BLESuper() {
 
     private val bluetoothManager =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -119,7 +119,7 @@ class BleClient(private val context: Context, private val oobCallback: MainActiv
     /**
      * Scanner zum finden von BLE Advertisern
      */
-    private var bleScanner : BluetoothLeScanner = bluetoothManager.adapter.bluetoothLeScanner
+    private var bleScanner : BluetoothLeScanner = bluetoothManager.adapter.bluetoothLeScanner!!
 
     /**
      * Callback für den Scanner zum Melden von gefundenen BLE Advertisern
@@ -186,7 +186,7 @@ class BleClient(private val context: Context, private val oobCallback: MainActiv
             flag=false
         }
         if(flag){
-            bleScanner = bluetoothManager.adapter.bluetoothLeScanner
+            bleScanner = bluetoothManager.adapter.bluetoothLeScanner !!
 
             Log.d("BleClient","Start Scanning")
 
@@ -278,4 +278,5 @@ class BleClient(private val context: Context, private val oobCallback: MainActiv
         return null
 
     }
+
 }

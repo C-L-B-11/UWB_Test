@@ -5,7 +5,8 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -227,7 +228,7 @@ open class MainActivity  : AppCompatActivity() {
             val s = byteToHexString(data)
             Log.d("TransportHandle","message Received $s")
 
-            if(data.size==0)
+            if(data.isEmpty())
                 return;
             val mode:Byte = data[0]
             var data = data.copyOfRange(1,data.size)
@@ -247,28 +248,28 @@ open class MainActivity  : AppCompatActivity() {
         }
 
         /**
-         * Member von OOBConnectionCallback
+         * StartMeasuring Paket wurde empfangen
          */
         fun startMeasuringOrder(mode:RangingTechnology) {
             setRangingTechnology(mode)
             startMeasuring()
         }
         /**
-         * Member von OOBConnectionCallback
+         * RequestMeasuring Paket wurde empfangen
          */
         fun requestMeasuring(mode:RangingTechnology) {
             setRangingTechnology(mode)
             startMeasuringBtn()
         }
         /**
-         * Member von OOBConnectionCallback
+         * StopMeasuring Paket wurde empfangen
          */
         fun stopMeasuring() {
             if(rangingSession!=null)
                 rangingSession?.stop()
         }
         /**
-         * Member von OOBConnectionCallback
+         * SharedResult Paket wurde empfangen
          */
         fun sharedResult(distance: Double) {
             gotResult(distance)
@@ -507,10 +508,18 @@ open class MainActivity  : AppCompatActivity() {
             var role: Int
             var config: RangingConfig
 
-            val rangingDevice = RangingDevice.Builder().build()
+            val rangingDeviceBuilder = RangingDevice.Builder()
+            val rangingDevice = rangingDeviceBuilder.build()
 
-            val deviceHandle: DeviceHandle = DeviceHandle.Builder(rangingDevice, transportHandle)
-                .build()
+            val deviceHandleBuilder  = DeviceHandle.Builder(rangingDevice, transportHandle)
+            if(rangingMode == RangingTechnology.BLE && oobMode == OOBTechnology.BLE){
+                val blAdap =  (this.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).getAdapter()
+                val blDevice = blAdap.getRemoteDevice((oobConnector as BLESuper).getAddress())
+                deviceHandleBuilder.setBluetoothDevice(blDevice)
+            }
+            val deviceHandle = deviceHandleBuilder.build()
+
+
             val filter: Set<Int> = when (rangingMode) {
                 RangingTechnology.BLE -> setOf(RangingManager.BLE_CS)
                 RangingTechnology.WIFI -> setOf(RangingManager.WIFI_NAN_RTT)
@@ -525,7 +534,8 @@ open class MainActivity  : AppCompatActivity() {
 
             if (swIsController?.isChecked == true) {
                 role = RangingPreference.DEVICE_ROLE_INITIATOR
-                config = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).setRangingTechnologyFilter(filter).build()
+                val configBuilder = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).setRangingTechnologyFilter(filter).setSecurityLevel(OobInitiatorRangingConfig.SECURITY_LEVEL_BASIC)
+                config = configBuilder.build()
 
             } else {
                 role = RangingPreference.DEVICE_ROLE_RESPONDER
@@ -550,7 +560,7 @@ open class MainActivity  : AppCompatActivity() {
     /**
      * Bereitet BLE-RAW sessions vor. Abgegrenzt, da möglicherweise erst eine BLE Verbindung aufgebaut bzw. eine Addresse vom Partner angefordert werden muss.
      */
-    private fun startRawSessionForAddress(data:ByteArray){
+    private fun startRawSessionForAddress(addressData:ByteArray){
         val permissions = mutableListOf(Manifest.permission.BLUETOOTH_CONNECT)
         permissions.add(Manifest.permission.BLUETOOTH_ADVERTISE)
         permissions.add(Manifest.permission.BLUETOOTH_SCAN)
@@ -564,8 +574,8 @@ open class MainActivity  : AppCompatActivity() {
 
         rangingSession = rangingManager?.createRangingSession(myExecutor, myRangingSessionCallback)
 
-        val address :String = data.decodeToString()
-        Log.d("RawRanging","Received Address: $address; $data")
+        val address :String = addressData.decodeToString()
+        Log.d("RawRanging","Received Address: $address; $addressData")
         if(!BluetoothAdapter.checkBluetoothAddress(address)){
             return
         }
@@ -724,26 +734,6 @@ open class MainActivity  : AppCompatActivity() {
          * trennt die Verbindung
          */
         abstract fun disconnect()
-
-        /**
-         * Initiator befiehlt dem Responder die Messung zu starten
-         */
-
-
-        /**
-         * Responder bittet den Initiator die Messung zu starten
-         */
-
-
-        /**
-         * befiehlt der Gegenseite das Ranging zu beenden, ruft stopMeasuring() beim Callback der Gegenseite auf
-         */
-
-
-        /**
-         * teilt das ermittelte Resultat mit der Gegenseite, ruft sharedResult() beim Callback der Gegenseite auf
-         */
-
 
         /**
          *  Kann von OOB implementierungen genutzt werden um Speicher oder Ports frei zu geben
