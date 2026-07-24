@@ -85,12 +85,14 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
         if(rPackage.size<2)
             return false
 
-        lastPackage = null
+        lastPackage = null             //Bug: timer wird bei jedem empfang gelöscht. Wenn FIN von Recv verloren geht und alter Recv jetzt sendet: endlosschleife
         repeatTimer?.cancel()
         repeatTimer = null
         val modeLocal = rPackage[0]
         val packageIdLocal:Byte = rPackage[1]
         val data = rPackage.copyOfRange(2,rPackage.size)
+
+        Log.d("TCP","<${modeMain.ordinal}; ${MainActivity.byteToHexString(rPackage)}")
 
         return when(modeMain){
             TCPModes.Idle -> {
@@ -173,7 +175,10 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
      */
     private fun handleSend(modeLocal:Byte,packageIdLocal:Byte,data:ByteArray):Boolean{
         when(modeLocal){
-            DATA_PACKAGE -> {return false}
+            DATA_PACKAGE -> {
+                Log.d("TCP","Unexpected DATA for Sender")
+                return false
+            }
 
             ACK_PACKAGE -> {
                 if(packageIdLocal >= totalPackages()-1){
@@ -245,6 +250,7 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
     @OptIn(ExperimentalTime::class)
     private fun outboundPackage(pack:ByteArray){
         lastPackage = pack
+        Log.d("TCP",">${modeMain.ordinal}; ${MainActivity.byteToHexString(pack)}")
         sendPackageFunction(pack)
 
         repeatTimer = CoroutineScope(Dispatchers.Main).launch {
