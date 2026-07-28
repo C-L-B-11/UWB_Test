@@ -148,7 +148,7 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
     }
 
     /**
-     * Kontaktiert Server sobald eine Verbindung aufgebaut wurde (aufgerufen von networkCallback.onAvailable())
+     * Kontaktiert Server, sobald eine Verbindung aufgebaut wurde (aufgerufen von networkCallback.onAvailable())
      */
     private fun runSocketClient(network: Network, serverAddress: InetAddress) {
         Log.d("WiFiAwareClient","Connecting to $serverAddress:8888")
@@ -156,7 +156,7 @@ class WiFiAwareClient(private val context: Context, private val callback: MainAc
         // Must use network.getSocketFactory() so the socket routes over the Aware NDP
         var socket: Socket? = null
         try {
-            socket = network.socketFactory.createSocket(serverAddress, 8888) as Socket
+            socket = network.socketFactory.createSocket(serverAddress.hostAddress, 8888) as Socket
         }
         catch (e:Exception){
             Log.d("WiFiAwareClient","Socket creation failed:${e.message}")

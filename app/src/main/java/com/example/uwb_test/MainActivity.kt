@@ -94,6 +94,7 @@ open class MainActivity  : AppCompatActivity() {
             mode = UiMode.Connecting
 
             runOnUiThread {
+                exception?.text =""
                 connectButton?.isEnabled = false
                 disconnectButton?.isEnabled = true
                 swIsController?.isEnabled = false
@@ -150,7 +151,6 @@ open class MainActivity  : AppCompatActivity() {
                 stopMeasuringButton?.isEnabled = false
                 swIsController?.isEnabled = true
                 toggleRadioGroup(rgTecOOB!!,true)
-                exception?.text =""
             }
         }
     }
@@ -213,7 +213,7 @@ open class MainActivity  : AppCompatActivity() {
          */
         override fun connectionClosed() {
             Log.d("TransportHandle","connection closed")
-            rangingSession?.close()
+            rangingSession?.stop()
             oobConnector?.destroy()
             oobConnector = null
             uiMode.disconnected()
@@ -310,7 +310,7 @@ open class MainActivity  : AppCompatActivity() {
             rangingSession = null
             stopMeasuring()
             runOnUiThread{
-                exception?.text="Failed to start ranging"
+                exception?.text="Failed to start ranging. Reason: $p0"
             }
         }
 

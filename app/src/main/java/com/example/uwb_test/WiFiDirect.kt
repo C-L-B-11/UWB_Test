@@ -22,7 +22,7 @@ import com.example.uwb_test.MainActivity.RangingTechnology
 class WiFiDirect(private val contextM: Context, private val callback: MainActivity.OobConnectionCallback,private val isHost:Boolean): MainActivity.OobConnection {
 
 
-    private val STRATEGY = Strategy.P2P_POINT_TO_POINT
+    private val STRATEGY = Strategy.P2P_STAR
 
 
     private var connectionsClient: ConnectionsClient? = null
@@ -83,7 +83,9 @@ class WiFiDirect(private val contextM: Context, private val callback: MainActivi
             connectionsClient?.requestConnection("Pixel 10 Client", endpointId, connectionLifecycleCallback)
         }
 
-        override fun onEndpointLost(endpointId: String) {}
+        override fun onEndpointLost(endpointId: String) {
+            callback.connectionClosed()
+        }
     }
 
     init{
@@ -105,9 +107,23 @@ class WiFiDirect(private val contextM: Context, private val callback: MainActivi
      * Startet die Veröffentlichung als Advertiser
      */
     private fun startAdvertising() {
-        if(!askPermissions(contextM,*arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION,android.Manifest.permission.NEARBY_WIFI_DEVICES))){
-            Log.d("WifiDirekt", "no Permission")
+        val permissions = mutableListOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(android.Manifest.permission.NEARBY_WIFI_DEVICES)
         }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            permissions.add(android.Manifest.permission.BLUETOOTH_ADVERTISE)
+            permissions.add(android.Manifest.permission.BLUETOOTH_CONNECT)
+        }
+
+        if (!askPermissions(contextM, *permissions.toTypedArray())) {
+            Log.d("WifiDirekt", "no Permission")
+            callback.statusMessage("Missing permissions for Advertising")
+            callback.connectionClosed()
+            return
+        }
+
+        connectionsClient?.stopAdvertising()
         val options = AdvertisingOptions.Builder().setStrategy(STRATEGY).build()
 
         connectionsClient?.startAdvertising(
@@ -116,9 +132,11 @@ class WiFiDirect(private val contextM: Context, private val callback: MainActivi
             connectionLifecycleCallback,
             options
         )?.addOnSuccessListener {
-            // Advertising successfully started, waiting for discoverer
+            Log.d("WifiDirekt", "Advertising started")
         }?.addOnFailureListener { e ->
-            // Handle failure
+            Log.e("WifiDirekt", "Advertising failed", e)
+            callback.statusMessage("Failed to start advertising: ${e.message}")
+            callback.connectionClosed()
         }
     }
 
@@ -126,19 +144,40 @@ class WiFiDirect(private val contextM: Context, private val callback: MainActivi
      * Startet die Suche nach einem Host
      */
     private fun startDiscovering() {
-        if(!askPermissions(contextM,*arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION,android.Manifest.permission.NEARBY_WIFI_DEVICES))){
-            Log.d("WifiDirect", "no Permission")
+        val permissions = mutableListOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(android.Manifest.permission.NEARBY_WIFI_DEVICES)
         }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            permissions.add(android.Manifest.permission.BLUETOOTH_SCAN)
+            permissions.add(android.Manifest.permission.BLUETOOTH_CONNECT)
+        }
+
+        if (!askPermissions(contextM, *permissions.toTypedArray())) {
+            Log.d("WifiDirect", "no Permission")
+            callback.statusMessage("Missing permissions for Discovery")
+            callback.connectionClosed()
+            return
+        }
+
+        connectionsClient?.stopDiscovery()
         val options = DiscoveryOptions.Builder().setStrategy(STRATEGY).build()
-        if(connectionsClient==null){
+        if (connectionsClient == null) {
             Log.d("WifiDirect", "no connectionsClient")
+            callback.connectionClosed()
             return
         }
         connectionsClient?.startDiscovery(
             SERVICE_ID,
             endpointDiscoveryCallback,
             options
-        )
+        )?.addOnSuccessListener {
+            Log.d("WifiDirect", "Discovery started")
+        }?.addOnFailureListener { e ->
+            Log.e("WifiDirect", "Discovery failed", e)
+            callback.statusMessage("Failed to start discovery: ${e.message}")
+            callback.connectionClosed()
+        }
     }
 
 
