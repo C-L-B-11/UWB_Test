@@ -155,7 +155,26 @@
             app:layout_constraintStart_toEndOf="@+id/tvMakeLog"
             app:layout_constraintTop_toTopOf="@+id/tvMakeLog" />
 
+        <TextView
+        android:id="@+id/tvUseGNSS"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:layout_marginTop="10dp"
+        android:text="Use GNSS"
+        android:textSize="10pt"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/tvMakeLog" />
 
+
+        <Switch
+            android:id="@+id/swUseGNSS"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            app:layout_constraintBottom_toBottomOf="@+id/tvUseGNSS"
+            app:layout_constraintStart_toEndOf="@+id/tvUseGNSS"
+            app:layout_constraintTop_toTopOf="@+id/tvUseGNSS" />
 
         <Button
             android:id="@+id/ConButton"
@@ -167,7 +186,7 @@
             android:text="Connect"
             app:layout_constraintEnd_toStartOf="@+id/DConButton"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/tvMakeLog" />
+            app:layout_constraintTop_toBottomOf="@+id/tvUseGNSS" />
 
         <Button
             android:id="@+id/DConButton"

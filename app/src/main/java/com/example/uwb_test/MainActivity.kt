@@ -77,6 +77,9 @@ open class MainActivity  : AppCompatActivity() {
     private var swIsController: Switch? = null
     @SuppressLint("UseSwitchCompatOrMaterialCode")
     private var swMakeLog: Switch? = null
+
+    @SuppressLint("UseSwitchCompatOrMaterialCode")
+    private var swUseGNSS: Switch? = null
     public var connectButton: Button? = null
     private var disconnectButton: Button? = null
     private var startMeasuringButton: Button? = null
@@ -400,6 +403,7 @@ open class MainActivity  : AppCompatActivity() {
         tvRangeDisplay = findViewById<TextView>(R.id.rangeDisplay)
         swIsController = findViewById<Switch>(R.id.swIsController)
         swMakeLog = findViewById<Switch>(R.id.swMakeLog)
+        swUseGNSS = findViewById<Switch>(R.id.swUseGNSS)
         exception = findViewById<TextView>(R.id.exception)
         connectButton = findViewById<Button>(R.id.ConButton)
         connectButton!!.setOnClickListener  { _ -> connect() }
