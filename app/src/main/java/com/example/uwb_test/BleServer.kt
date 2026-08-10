@@ -200,10 +200,7 @@ class BleServer(private val context : Context, private val callback : MainActivi
             sendFinalMessage(data)
         }
         else
-        if(!tcpAdapter.sendMessage(data)){
-            Log.d("BLE_Server","Sending through tcp failed")
-            callback.statusMessage("Communication error")
-        }
+            tcpAdapter.sendMessage(data)
     }
 
     override fun isInitiator(): Boolean {

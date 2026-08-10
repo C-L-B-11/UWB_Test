@@ -10,6 +10,10 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.GnssMeasurementsEvent
+import android.location.GnssNavigationMessage
+import android.location.GnssStatus
+import android.location.Location
 import android.net.Uri
 import android.os.Bundle
 import android.ranging.RangingConfig
@@ -77,7 +81,6 @@ open class MainActivity  : AppCompatActivity() {
     private var swIsController: Switch? = null
     @SuppressLint("UseSwitchCompatOrMaterialCode")
     private var swMakeLog: Switch? = null
-
     @SuppressLint("UseSwitchCompatOrMaterialCode")
     private var swUseGNSS: Switch? = null
     public var connectButton: Button? = null
@@ -127,6 +130,7 @@ open class MainActivity  : AppCompatActivity() {
                 disconnectButton?.isEnabled = false
                 toggleRadioGroup(rgTecRANG!!,false)
                 swMakeLog?.isEnabled = false
+                swUseGNSS?.isEnabled = false
             }
         }
         fun stoppedMeasuring(){
@@ -139,6 +143,7 @@ open class MainActivity  : AppCompatActivity() {
                 disconnectButton?.isEnabled = true
 
                 swMakeLog?.isEnabled = true
+                swUseGNSS?.isEnabled = true
                 toggleRadioGroup(rgTecRANG!!,true)
             }
         }
@@ -323,7 +328,7 @@ open class MainActivity  : AppCompatActivity() {
         }
 
         override fun onResults(p0: RangingDevice, p1: RangingData) {
-            Log.d("RangingResult","onResults: $p1")
+            //Log.d("RangingResult","onResults: $p1")
             val distance = p1.distance?.measurement
             if(distance!=null) {
                 gotResult(distance)
@@ -357,6 +362,50 @@ open class MainActivity  : AppCompatActivity() {
      * Speichert die letzten Ranging Capabilities
      */
     private val availableCapabilities = MyRangingCapabilities()
+
+    private var gnssProvider: GnssMeasurementProvider? = null
+
+    private val gnssListener = object : GnssMeasurementListener {
+        override fun onLocationChanged(location: Location?) {
+            Log.d("GnssListener","LocationChanged: $location")
+            logEntry("GNSSListener: onLocationChanged")
+        }
+
+        override fun onGnssMeasurementsReceived(event: GnssMeasurementsEvent?) {
+            Log.d("GnssListener","Received ${event?.measurements?.size} Measurements")
+            logEntry("GNSSListener: onGnssMeasurementsReceived")
+            for(measurement in event?.measurements!!)
+            {
+                //Log.d("GnssListener","${measurement}")
+            }
+        }
+
+        override fun onGnssNavigationMessageReceived(event: GnssNavigationMessage?) {
+            Log.d("GnssListener","NavigationMessage")
+            logEntry("GNSSListener: onGnssNavigationMessageReceived")
+        }
+
+        override fun onGnssStatusChanged(gnssStatus: GnssStatus?) {
+            Log.d("GnssListener","StatusChanged: $gnssStatus")
+            logEntry("GNSSListener: onGnssStatusCahnged")
+        }
+
+        override fun onListenerRegistration(listener: String?, result: Boolean) {
+            Log.d("GnssListener","Registration: $listener : $result")
+            logEntry("GNSSListener: onListenerRegistration")
+        }
+
+        override fun onNmeaReceived(l: Long, s: String?) {
+            Log.d("GnssListener","Nmea: $l, $s")
+            logEntry("GNSSListener: onNmeaReceived")
+        }
+
+        override fun onTTFFReceived(l: Long) {
+            Log.d("GnssListener","TTFF: $l")
+            logEntry("GNSSListener: onTTFFReceived")
+        }
+
+    }
 
 
     /**
@@ -464,6 +513,11 @@ open class MainActivity  : AppCompatActivity() {
         }
         else{
             uiMode.stoppedMeasuring()
+            if(swUseGNSS?.isChecked==true)
+            {
+                gnssProvider?.unregisterAll()
+                gnssProvider = null
+            }
             if(swMakeLog?.isChecked == true && logEntries!=null)
             {
                 safeLog()
@@ -623,6 +677,9 @@ open class MainActivity  : AppCompatActivity() {
         {
             oobConnector?.sendMessage(byteArrayOf(START_MEASUREMENT,rangingMode.ordinal.toByte()))
         }
+        if(swUseGNSS?.isChecked == true){
+            gnssProvider = GnssMeasurementProvider(this as Activity, this as Context,gnssListener)
+        }
 
         if(swMakeLog?.isChecked == true){
             logEntries = ArrayList<String>()
@@ -672,7 +729,7 @@ open class MainActivity  : AppCompatActivity() {
      */
     @OptIn(ExperimentalTime::class)
     public fun logEntry(msg:String){
-        if(logEntries==null)
+        if(logEntries==null||swMakeLog?.isChecked==false)
             return
         var s = "[${dateTimeString()}]:"
         s+= msg

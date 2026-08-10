@@ -97,7 +97,7 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
         val packageIdLocal:Byte = rPackage[1]
         val data = rPackage.copyOfRange(2,rPackage.size)
 
-        Log.d("TCP","<${modeSend.ordinal};${modeRecv.ordinal}; ${MainActivity.byteToHexString(rPackage)}")
+        //Log.d("TCP","<${modeSend.ordinal};${modeRecv.ordinal}; ${MainActivity.byteToHexString(rPackage)}")
 
         return when(modeLocal){
             DATA_PACKAGE -> {
@@ -189,15 +189,15 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
     /**
      * Die Anwendungsschicht meldet hier das Bedürfnis, eine Nachricht zu senden
      */
-    public fun sendMessage(message:ByteArray): Boolean{
+    public fun sendMessage(message:ByteArray){
         if((sendMessageBuffer!=null) or (modeSend != TCPModes.Idle)){
-            Log.d("TCP","Message Added to queue")
+            //Log.d("TCP","Message Added to queue")
             sendMessageBufferQueue.add(message)
-            return true
+
         }
         sendMessageBuffer = message
         initSend()
-        return true
+
     }
 
     private fun initSend(){
@@ -233,7 +233,7 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
     @OptIn(ExperimentalTime::class)
     private fun outboundPackageSend(pack:ByteArray){
         lastPackageSend = pack
-        Log.d("TCP",">${modeSend.ordinal}; ${MainActivity.byteToHexString(pack)}")
+        //Log.d("TCP",">${modeSend.ordinal}; ${MainActivity.byteToHexString(pack)}")
         sendPackageFunction(pack)
 
         repeatTimerSend = CoroutineScope(Dispatchers.Main).launch {
@@ -246,7 +246,7 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
     @OptIn(ExperimentalTime::class)
     private fun outboundPackageRecv(pack:ByteArray){
         lastPackageRecv = pack
-        Log.d("TCP",">${modeRecv.ordinal}; ${MainActivity.byteToHexString(pack)}")
+        //Log.d("TCP",">${modeRecv.ordinal}; ${MainActivity.byteToHexString(pack)}")
         sendPackageFunction(pack)
 
         repeatTimerRecv = CoroutineScope(Dispatchers.Main).launch {

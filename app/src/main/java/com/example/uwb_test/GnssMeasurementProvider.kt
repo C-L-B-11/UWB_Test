@@ -1,4 +1,5 @@
 package com.example.uwb_test
+import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.location.GnssMeasurementsEvent
@@ -12,7 +13,9 @@ import android.location.LocationManager
 import com.google.android.gms.location.LocationRequest
 import android.location.OnNmeaMessageListener
 import android.os.CancellationSignal
+import android.os.Looper
 import android.os.SystemClock
+import androidx.annotation.RequiresPermission
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 
@@ -44,7 +47,7 @@ class GnssMeasurementProvider(
     private val mListeners: MutableList<GnssMeasurementListener>
 
     val locationManager: LocationManager
-    private val mLocationListener: LocationListenerG = object : LocationListenerG {
+    private val mLocationListenerGog: LocationListenerG = object : LocationListenerG {
         override fun onLocationChanged(location: Location) {
             if (firstTime && location.getProvider() == LocationManager.GPS_PROVIDER) {
                 if (mLogLocations) {
@@ -66,7 +69,7 @@ class GnssMeasurementProvider(
 
     }
 
-    private val mFusedLocationListener: LocationListenerA = object : LocationListenerA {
+    private val mLocationListenerAnd: LocationListenerA = object : LocationListenerA {
         public override fun onLocationChanged(location: Location) {
             if (firstTime && location.getProvider() == LocationManager.GPS_PROVIDER) {
                 if (mLogLocations) {
@@ -136,6 +139,9 @@ class GnssMeasurementProvider(
     init {
         this.mListeners = listOf(*loggers) as MutableList<GnssMeasurementListener>
         this.locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        MainActivity.askPermissions(context, Manifest.permission.ACCESS_FINE_LOCATION)
+
+        registerAll()
     }
 
     fun setLogLocations(value: Boolean) {
@@ -185,14 +191,16 @@ class GnssMeasurementProvider(
                 locationManager.requestLocationUpdates(
                     LocationManager.NETWORK_PROVIDER,
                     LOCATION_RATE_NETWORK_MS,
-                    0.0f,  /* minDistance */
-                    mFusedLocationListener
+                    0.1f,  /* minDistance */
+                    mLocationListenerAnd,
+                    Looper.getMainLooper()
                 )
                 locationManager.requestLocationUpdates(
                     LocationManager.GPS_PROVIDER,
                     LOCATION_RATE_GPS_MS,
-                    0.0f,  /* minDistance */
-                    mFusedLocationListener
+                    0.1f,  /* minDistance */
+                    mLocationListenerAnd,
+                    Looper.getMainLooper()
                 )
             } catch (e: SecurityException) {
                 // TODO(adaext)
@@ -208,7 +216,7 @@ class GnssMeasurementProvider(
     }
 
     fun unregisterLocation() {
-        locationManager.removeUpdates(mFusedLocationListener)
+        locationManager.removeUpdates(mLocationListenerAnd)
     }
 
     fun registerFusedLocation() {
@@ -219,7 +227,7 @@ class GnssMeasurementProvider(
         try {
 
             LocationServices.getFusedLocationProviderClient(activity).requestLocationUpdates(
-                locationRequest,myExecutor, mLocationListener
+                locationRequest,myExecutor, mLocationListenerGog
             )
         } catch (e: SecurityException) {
             // TODO(adaext):
@@ -233,7 +241,7 @@ class GnssMeasurementProvider(
     }
 
     fun unRegisterFusedLocation() {
-        LocationServices.getFusedLocationProviderClient(activity).removeLocationUpdates(mLocationListener)
+        LocationServices.getFusedLocationProviderClient(activity).removeLocationUpdates(mLocationListenerGog)
     }
 
     fun registerSingleNetworkLocation() {
@@ -242,7 +250,7 @@ class GnssMeasurementProvider(
         if (isNetworkProviderEnabled) {
             try {
                 val cancellationSignal : CancellationSignal? = null
-                val consumer : Consumer<Location?> = Consumer { location -> mLocationListener.onLocationChanged(location!!)}
+                val consumer : Consumer<Location?> = Consumer { location -> mLocationListenerGog.onLocationChanged(location!!)}
                 locationManager.getCurrentLocation(
                     LocationManager.NETWORK_PROVIDER,cancellationSignal, myExecutor, consumer
                 )
@@ -266,7 +274,7 @@ class GnssMeasurementProvider(
             registrationTimeNanos = SystemClock.elapsedRealtimeNanos()
             try {
                 val cancellationSignal : CancellationSignal? = null
-                val consumer : Consumer<Location?> = Consumer { location -> mLocationListener.onLocationChanged(location!!)}
+                val consumer : Consumer<Location?> = Consumer { location -> mLocationListenerGog.onLocationChanged(location!!)}
                 locationManager.getCurrentLocation(
                     LocationManager.NETWORK_PROVIDER,cancellationSignal, myExecutor, consumer
                 )
@@ -287,7 +295,7 @@ class GnssMeasurementProvider(
         try {
             logRegistration(
                 "GnssMeasurements",
-                locationManager.registerGnssMeasurementsCallback(gnssMeasurementsEventListener)
+                locationManager.registerGnssMeasurementsCallback(myExecutor,gnssMeasurementsEventListener)
             )
         } catch (e: SecurityException) {
             // TODO(adaext):
@@ -304,10 +312,11 @@ class GnssMeasurementProvider(
         locationManager.unregisterGnssMeasurementsCallback(gnssMeasurementsEventListener)
     }
 
+    @RequiresPermission(Manifest.permission.ACCESS_FINE_LOCATION)
     fun registerNavigation() {
         logRegistration(
             "GpsNavigationMessage",
-            locationManager.registerGnssNavigationMessageCallback(gnssNavigationMessageListener)
+            locationManager.registerGnssNavigationMessageCallback(myExecutor,gnssNavigationMessageListener)
         )
     }
 
@@ -318,7 +327,7 @@ class GnssMeasurementProvider(
     fun registerGnssStatus() {
         try {
             logRegistration(
-                "GnssStatus", locationManager.registerGnssStatusCallback(gnssStatusListener)
+                "GnssStatus", locationManager.registerGnssStatusCallback(myExecutor,gnssStatusListener)
             )
         } catch (e: SecurityException) {
             // TODO(adaext):
@@ -337,7 +346,7 @@ class GnssMeasurementProvider(
 
     fun registerNmea() {
         try {
-            logRegistration("Nmea", locationManager.addNmeaListener(nmeaListener))
+            logRegistration("Nmea", locationManager.addNmeaListener(myExecutor,nmeaListener))
         } catch (e: SecurityException) {
             // TODO(adaext):
             //    ActivityCompat#requestPermissions
@@ -353,20 +362,22 @@ class GnssMeasurementProvider(
         locationManager.removeNmeaListener(nmeaListener)
     }
 
+    @RequiresPermission(Manifest.permission.ACCESS_FINE_LOCATION)
     fun registerAll() {
-        registerLocation()
         registerMeasurements()
         registerNavigation()
         registerGnssStatus()
         registerNmea()
+        registerLocation()
     }
 
     fun unregisterAll() {
-        unregisterLocation()
+
         unregisterMeasurements()
         unregisterNavigation()
         unregisterGpsStatus()
         unregisterNmea()
+        unregisterLocation()
     }
 
     private fun logRegistration(listener: String?, result: Boolean) {
