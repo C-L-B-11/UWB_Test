@@ -5,7 +5,6 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
@@ -349,13 +348,11 @@ open class MainActivity  : AppCompatActivity() {
     /**
      * Callback für die Ranging Capabilities
      */
-    private var capabilitiesCallback = object :RangingManager.RangingCapabilitiesCallback{
-        override fun onRangingCapabilities(p0: android.ranging.RangingCapabilities) {
-            Log.d("RangingCapa", "Capabilities: $p0")
-            availableCapabilities.BLE_CS = p0.csCapabilities != null
-            availableCapabilities.UWB = p0.uwbCapabilities != null
-            availableCapabilities.WIFI_RTT = p0.rttRangingCapabilities != null
-        }
+    private var capabilitiesCallback = RangingManager.RangingCapabilitiesCallback { p0 ->
+        Log.d("RangingCapa", "Capabilities: $p0")
+        availableCapabilities.BLE_CS = p0.csCapabilities != null
+        availableCapabilities.UWB = p0.uwbCapabilities != null
+        availableCapabilities.WIFI_RTT = p0.rttRangingCapabilities != null
     }
 
     /**
@@ -368,12 +365,14 @@ open class MainActivity  : AppCompatActivity() {
     private val gnssListener = object : GnssMeasurementListener {
         override fun onLocationChanged(location: Location?) {
             Log.d("GnssListener","LocationChanged: $location")
-            logEntry("GNSSListener: onLocationChanged")
+            logEntry(LogEntryType.GnssLocation,"$location")
+
+            transportHandle.statusMessage("LocationChanged:${dateTimeString()}")
         }
 
         override fun onGnssMeasurementsReceived(event: GnssMeasurementsEvent?) {
             Log.d("GnssListener","Received ${event?.measurements?.size} Measurements")
-            logEntry("GNSSListener: onGnssMeasurementsReceived")
+            logEntry(LogEntryType.GnssMeasurement,event?.measurements?.size.toString())
             for(measurement in event?.measurements!!)
             {
                 //Log.d("GnssListener","${measurement}")
@@ -382,27 +381,26 @@ open class MainActivity  : AppCompatActivity() {
 
         override fun onGnssNavigationMessageReceived(event: GnssNavigationMessage?) {
             Log.d("GnssListener","NavigationMessage")
-            logEntry("GNSSListener: onGnssNavigationMessageReceived")
+            logEntry(LogEntryType.GnssNavigation,"")
         }
 
         override fun onGnssStatusChanged(gnssStatus: GnssStatus?) {
             Log.d("GnssListener","StatusChanged: $gnssStatus")
-            logEntry("GNSSListener: onGnssStatusCahnged")
+            logEntry(LogEntryType.GnssStatus,"")
         }
 
         override fun onListenerRegistration(listener: String?, result: Boolean) {
             Log.d("GnssListener","Registration: $listener : $result")
-            logEntry("GNSSListener: onListenerRegistration")
         }
 
         override fun onNmeaReceived(l: Long, s: String?) {
-            Log.d("GnssListener","Nmea: $l, $s")
-            logEntry("GNSSListener: onNmeaReceived")
+            //Log.d("GnssListener","Nmea: $l, $s")
+            //logEntry(LogEntryType.GnssNema,"")
         }
 
         override fun onTTFFReceived(l: Long) {
             Log.d("GnssListener","TTFF: $l")
-            logEntry("GNSSListener: onTTFFReceived")
+            logEntry(LogEntryType.GnssTTFF,l.toString())
         }
 
     }
@@ -728,10 +726,10 @@ open class MainActivity  : AppCompatActivity() {
      * Fügt einem Logevent einen Zeitstempel hinzu und speichert es in logEntries
      */
     @OptIn(ExperimentalTime::class)
-    public fun logEntry(msg:String){
+    public fun logEntry(type:LogEntryType,msg:String){
         if(logEntries==null||swMakeLog?.isChecked==false)
             return
-        var s = "[${dateTimeString()}]:"
+        var s = "[${dateTimeString()}],${type.name},"
         s+= msg
         s+= "\n"
         logEntries?.add(s)
@@ -765,7 +763,7 @@ open class MainActivity  : AppCompatActivity() {
             }
         }
         if(swMakeLog?.isChecked==true ){
-            logEntry(data.toString())
+            logEntry(LogEntryType.DistMeasurement,data.toString())
         }
     }
 
@@ -903,6 +901,10 @@ open class MainActivity  : AppCompatActivity() {
      */
     enum class RangingTechnology{
         AUTO,WIFI,BLE,BLE_RAW,UWB    //Reihenfolge muss der der UI entsprechen
+    }
+
+    enum class LogEntryType{
+        DistMeasurement,GnssLocation,GnssMeasurement,GnssNavigation,GnssStatus,GnssNmea,GnssTTFF
     }
 
     /**
