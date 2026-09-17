@@ -239,11 +239,16 @@ class BleServer(private val context : Context, private val callback : MainActivi
     /**
      * Liefert die MAC Adresse des anderen Bluetooth Gerätes zurück
      */
-    override fun getAddress() :String?{
+    override fun getPeerAddress() :String?{
         if(myDevice!=null){
             return myDevice?.address
         }
         return null
+    }
+
+    override fun getMyAddress():String?{
+        return bluetoothManager.adapter.address
+
     }
 
 }
