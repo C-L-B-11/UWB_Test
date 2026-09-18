@@ -618,8 +618,15 @@ open class MainActivity  : AppCompatActivity() {
             var peerAddress: ByteArray? = null
             var myAddress: ByteArray? = null
             try{
-                peerAddress = addressStringToByteArray((oobConnector as BLESuper).getPeerAddress()!!)
-                myAddress = addressStringToByteArray((oobConnector as BLESuper).getMyAddress()!!)
+                //peerAddress = addressStringToByteArray((oobConnector as BLESuper).getPeerAddress()!!)
+                //myAddress = addressStringToByteArray((oobConnector as BLESuper).getMyAddress()!!)
+                peerAddress = byteArrayOf(0x48,0x30)
+                myAddress = byteArrayOf(0x38,0x32)
+                if(swIsController?.isChecked == true) {
+                    val tmp = myAddress
+                    myAddress = peerAddress
+                    peerAddress = tmp
+                }
                 Log.d("RawRanging","Peer Address: $peerAddress; ${byteToHexString(peerAddress!!)}")
                 Log.d("RawRanging","My Address: $myAddress; ${byteToHexString(myAddress!!)}")
 
@@ -638,10 +645,11 @@ open class MainActivity  : AppCompatActivity() {
      * Bereitet BLE-RAW sessions vor. Abgegrenzt, da möglicherweise erst eine BLE Verbindung aufgebaut bzw. eine Addresse vom Partner angefordert werden muss.
      */
     private fun startRawSessionForAddress(myAddressData:ByteArray, peerAddressData:ByteArray){
-        val permissions = mutableListOf(Manifest.permission.BLUETOOTH_CONNECT)
-        permissions.add(Manifest.permission.BLUETOOTH_ADVERTISE)
-        permissions.add(Manifest.permission.BLUETOOTH_SCAN)
+        val permissions = mutableListOf(Manifest.permission.ACCESS_COARSE_LOCATION)
         permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        permissions.add(Manifest.permission.RANGING)
+        permissions.add(Manifest.permission.UWB_RANGING)
+
 
 
         if(!askPermissions(this, *permissions.toTypedArray()))
@@ -681,12 +689,15 @@ open class MainActivity  : AppCompatActivity() {
 
         val myAddress = UwbAddress.fromBytes(myAddressData2)
         val peerAddress = UwbAddress.fromBytes(peerAddressData2)
-        val uwbCC = UwbComplexChannel.Builder().setChannel(5).build()
 
-        val UWBParams = UwbRangingParams.Builder(1,1,myAddress,peerAddress)
+        val uwbCC = UwbComplexChannel.Builder().setChannel(UwbComplexChannel.UWB_CHANNEL_5).setPreambleIndex(
+            UwbComplexChannel.UWB_PREAMBLE_CODE_INDEX_10).build()
+
+        val UWBParams = UwbRangingParams.Builder(2,UwbRangingParams.CONFIG_UNICAST_DS_TWR,myAddress,peerAddress)
             .setComplexChannel(uwbCC)
-            .setRangingUpdateRate(android.ranging.raw.RawRangingDevice.UPDATE_RATE_NORMAL)
-            .setSlotDuration(UwbRangingParams.DURATION_2_MS)
+            .setSessionKeyInfo(byteArrayOf(1,2,3,4,5,6,7,8))
+            .setRangingUpdateRate(android.ranging.raw.RawRangingDevice.UPDATE_RATE_INFREQUENT)
+            .setSlotDuration(UwbRangingParams.DURATION_1_MS)
             .build()
 
         val rawDevice = RawRangingDevice.Builder().setUwbRangingParams(UWBParams).setRangingDevice(rangingDevice).build()
