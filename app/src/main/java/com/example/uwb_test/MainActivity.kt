@@ -649,6 +649,7 @@ open class MainActivity  : AppCompatActivity() {
         permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
         permissions.add(Manifest.permission.RANGING)
         permissions.add(Manifest.permission.UWB_RANGING)
+        permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
 
 
 
@@ -690,14 +691,14 @@ open class MainActivity  : AppCompatActivity() {
         val myAddress = UwbAddress.fromBytes(myAddressData2)
         val peerAddress = UwbAddress.fromBytes(peerAddressData2)
 
-        val uwbCC = UwbComplexChannel.Builder().setChannel(UwbComplexChannel.UWB_CHANNEL_5).setPreambleIndex(
-            UwbComplexChannel.UWB_PREAMBLE_CODE_INDEX_10).build()
+        val uwbCC = UwbComplexChannel.Builder().setChannel(UwbComplexChannel.UWB_CHANNEL_9).setPreambleIndex(
+            UwbComplexChannel.UWB_PREAMBLE_CODE_INDEX_11).build()
 
-        val UWBParams = UwbRangingParams.Builder(2,UwbRangingParams.CONFIG_UNICAST_DS_TWR,myAddress,peerAddress)
+        val UWBParams = UwbRangingParams.Builder(34,UwbRangingParams.CONFIG_UNICAST_DS_TWR,myAddress,peerAddress)
             .setComplexChannel(uwbCC)
-            .setSessionKeyInfo(byteArrayOf(1,2,3,4,5,6,7,8))
-            .setRangingUpdateRate(android.ranging.raw.RawRangingDevice.UPDATE_RATE_INFREQUENT)
-            .setSlotDuration(UwbRangingParams.DURATION_1_MS)
+            .setSessionKeyInfo(byteArrayOf(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16))
+            .setRangingUpdateRate(android.ranging.raw.RawRangingDevice.UPDATE_RATE_FREQUENT)
+            .setSlotDuration(UwbRangingParams.DURATION_2_MS)
             .build()
 
         val rawDevice = RawRangingDevice.Builder().setUwbRangingParams(UWBParams).setRangingDevice(rangingDevice).build()
@@ -723,9 +724,9 @@ open class MainActivity  : AppCompatActivity() {
         runOnUiThread {
             tvRangeDisplay?.text = "0,000m"
         }
-
-        val rangingSessionConfig : SessionConfig = SessionConfig.Builder().setAntennaMode(SessionConfig.ANTENNA_MODE_OMNI).build()
-        val rangingPreference: RangingPreference =  RangingPreference.Builder(role, config).build()
+        val dataConfig = android.ranging.DataNotificationConfig.Builder().setNotificationConfigType(android.ranging.DataNotificationConfig.NOTIFICATION_CONFIG_ENABLE).build()
+        val rangingSessionConfig : SessionConfig = SessionConfig.Builder().setDataNotificationConfig(dataConfig).build()
+        val rangingPreference: RangingPreference =  RangingPreference.Builder(role, config).setSessionConfig(rangingSessionConfig).build()
         rangingSession?.start(rangingPreference)
 
         if(swIsController?.isChecked == false)//normally false in case of only OOB
