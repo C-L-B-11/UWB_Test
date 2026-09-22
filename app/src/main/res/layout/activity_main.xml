@@ -29,43 +29,7 @@
                 app:title="UWB_Test" />
         </com.google.android.material.appbar.AppBarLayout>
 
-        <TextView
-            android:id="@+id/tvTechnologyOOB"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
-            android:layout_marginTop="10dp"
-            android:text="Technology for\nOOB Connection"
-            android:textSize="10pt"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/bar" />
 
-
-        <RadioGroup
-            android:id="@+id/rgTechnologyOOB"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
-
-            app:layout_constraintStart_toEndOf="@+id/tvTechnologyOOB"
-            app:layout_constraintTop_toTopOf="@+id/tvTechnologyOOB" >
-
-            <RadioButton
-                android:id="@+id/rbTecOOBBLE"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checked="true"
-                android:text="BLE" />
-            <RadioButton android:id="@+id/rbTecOOBWIFIDIRECT"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="WIFI Direct"/>
-
-            <RadioButton android:id="@+id/rbTecOOBWIFIAWARE"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="WIFI Aware"/>
-        </RadioGroup>
 
 
         <TextView
@@ -77,7 +41,7 @@
             android:text="Technology for\nRanging"
             android:textSize="10pt"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/rgTechnologyOOB" />
+            app:layout_constraintTop_toBottomOf="@+id/bar" />
 
 
         <RadioGroup
@@ -111,6 +75,10 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="UWB"/>
+            <RadioButton android:id="@+id/rbTecRangMULTI"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="MULTI"/>
         </RadioGroup>
         <TextView
             android:id="@+id/tvIsController"
