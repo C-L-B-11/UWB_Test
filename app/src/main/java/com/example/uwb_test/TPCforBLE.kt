@@ -195,9 +195,10 @@ class TPCforBLE (sendPcktFunc_:(ByteArray)->Unit,recvMsgFunc_:(ByteArray)->Unit,
             sendMessageBufferQueue.add(message)
 
         }
-        sendMessageBuffer = message
-        initSend()
-
+        else {
+            sendMessageBuffer = message
+            initSend()
+        }
     }
 
     private fun initSend(){

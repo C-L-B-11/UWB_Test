@@ -22,8 +22,6 @@ import android.ranging.RangingManager
 import android.ranging.RangingPreference
 import android.ranging.RangingSession
 import android.ranging.SessionConfig
-import android.ranging.ble.cs.BleCsRangingCapabilities
-import android.ranging.ble.cs.BleCsRangingParams
 import android.ranging.oob.DeviceHandle
 import android.ranging.oob.OobInitiatorRangingConfig
 import android.ranging.oob.OobResponderRangingConfig
@@ -53,7 +51,6 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.format
 import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
-import java.util.Locale
 import java.util.Locale.getDefault
 import java.util.UUID
 
@@ -291,7 +288,8 @@ open class MainActivity  : AppCompatActivity() {
                 }
 
                 override fun close() {
-                    TODO("Not yet implemented")
+                    Log.d("TransportHandle","close()")
+                    //TODO("Not yet implemented")
                 }
 
                 override fun receiveData(data:ByteArray){
@@ -443,6 +441,7 @@ open class MainActivity  : AppCompatActivity() {
      * Speichert Ereignisse für die log Datei
      */
     private var logEntries :  ArrayList<String>? = null
+    private var savedResults : MutableMap<Byte,Double> = mutableMapOf()
 
 
     /**
@@ -567,103 +566,28 @@ open class MainActivity  : AppCompatActivity() {
      */
     @SuppressLint("NewApi", "MissingPermission", "SetTextI18n")
     private fun startMeasuring(){
-        if(rangingMode != RangingTechnology.UWB_RAW) {
-            val permissions = mutableListOf(Manifest.permission.BLUETOOTH_CONNECT)
-            if ((rangingMode == RangingTechnology.BLE || rangingMode == RangingTechnology.AUTO) && availableCapabilities.BLE_CS) {
-                permissions.add(Manifest.permission.BLUETOOTH_ADVERTISE)
-                permissions.add(Manifest.permission.BLUETOOTH_SCAN)
-                permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
-            }
-            if ((rangingMode == RangingTechnology.UWB || rangingMode == RangingTechnology.AUTO) && availableCapabilities.UWB) {
-                permissions.add(Manifest.permission.RANGING)
-                permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
-                permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
-                permissions.add(Manifest.permission.UWB_RANGING)
-            }
-            if ((rangingMode == RangingTechnology.WIFI || rangingMode == RangingTechnology.AUTO) && availableCapabilities.WIFI_RTT) {
-                permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
-                permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
-            }
-
-            if(!askPermissions(this, *permissions.toTypedArray()))
-            {
-                return
-            }
-
-            if(sessions.size!=0)
-                return
-
-            val session = MultiSession(1)
-            sessions[session.key] = session
-            session.session = rangingManager?.createRangingSession(myExecutor, session.myRangingSessionCallback)
-
-            var role: Int
-            var config: RangingConfig
-
-            val rangingDeviceBuilder = RangingDevice.Builder()
-            val rangingDevice = rangingDeviceBuilder.build()
-
-            val deviceHandleBuilder  = DeviceHandle.Builder(rangingDevice, session.handle)
-            if(rangingMode == RangingTechnology.BLE){
-                val blAdap =  (this.getSystemService(BLUETOOTH_SERVICE) as BluetoothManager).getAdapter()
-                val blDevice = blAdap.getRemoteDevice((oobConnector as BLESuper).getPeerAddress())
-                deviceHandleBuilder.setBluetoothDevice(blDevice)
-            }
-            val deviceHandle = deviceHandleBuilder.build()
-
-
-            val filter: Set<Int> = when (rangingMode) {
-                RangingTechnology.BLE -> setOf(RangingManager.BLE_CS)
-                RangingTechnology.WIFI -> setOf(RangingManager.WIFI_NAN_RTT)
-                RangingTechnology.UWB -> setOf(RangingManager.UWB)
-                else -> setOf(
-                    RangingManager.BLE_CS,
-                    RangingManager.WIFI_NAN_RTT,
-                    RangingManager.UWB,
-                )
-            }
-
-
-            if (swIsController?.isChecked == true) {
-                role = RangingPreference.DEVICE_ROLE_INITIATOR
-                val configBuilder = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).setRangingTechnologyFilter(filter)
-                if(rangingMode == RangingTechnology.UWB){
-                    configBuilder.setSecurityLevel(OobInitiatorRangingConfig.SECURITY_LEVEL_SECURE)
-                }
-                else
-                    configBuilder.setSecurityLevel(OobInitiatorRangingConfig.SECURITY_LEVEL_BASIC)
-                config = configBuilder.build()
-
-            } else {
-                role = RangingPreference.DEVICE_ROLE_RESPONDER
-                config = OobResponderRangingConfig.Builder(deviceHandle).build()
-            }
-            startMeasuring2(config,role,session.session)
-        }
-        else{
-            var peerAddress: ByteArray? = null
-            var myAddress: ByteArray? = null
-            try{
-                //peerAddress = addressStringToByteArray((oobConnector as BLESuper).getPeerAddress()!!)
-                //myAddress = addressStringToByteArray((oobConnector as BLESuper).getMyAddress()!!)
-                peerAddress = byteArrayOf(0x48,0x30)
-                myAddress = byteArrayOf(0x38,0x32)
-                if(swIsController?.isChecked == true) {
-                    val tmp = myAddress
-                    myAddress = peerAddress
-                    peerAddress = tmp
-                }
-                Log.d("RawRanging","Peer Address: $peerAddress; ${byteToHexString(peerAddress!!)}")
-                Log.d("RawRanging","My Address: $myAddress; ${byteToHexString(myAddress!!)}")
+        when(rangingMode){
+            RangingTechnology.MULTI -> {
+                UWBRawSession()
+                WIFISession()
+                BLESession()
 
             }
-            catch(_:Exception){
-                runOnUiThread{
-                    exception?.text = "No BLE device found"
-                }
+            RangingTechnology.UWB_RAW -> {
+                UWBRawSession()
             }
-
-            startRawSessionForAddress(myAddress!!,peerAddress!!)
+            RangingTechnology.BLE -> {
+                BLESession()
+            }
+            RangingTechnology.UWB -> {
+                UWBSession()
+            }
+            RangingTechnology.WIFI -> {
+                WIFISession()
+            }
+            RangingTechnology.AUTO -> {
+                AUTOSession()
+            }
         }
 
         if(swIsController?.isChecked == false)//normally false in case of only OOB
@@ -676,46 +600,183 @@ open class MainActivity  : AppCompatActivity() {
 
         if(swMakeLog?.isChecked == true){
             logEntries = ArrayList<String>()
+            savedResults.clear()
         }
     }
 
+    private fun BLESession(){
+        val permissions = mutableListOf(Manifest.permission.BLUETOOTH_CONNECT)
+        if ( availableCapabilities.BLE_CS) {
+            permissions.add(Manifest.permission.BLUETOOTH_ADVERTISE)
+            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
+            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        if(!askPermissions(this, *permissions.toTypedArray()))
+        {
+            return
+        }
+        val session = MultiSession(RangingManager.BLE_CS.toByte())
+        if(sessions.keys.contains(session.key))
+        {
+            Log.d("BLESession","Session with key ${session.key} already exists")
+            return
+        }
+        sessions[session.key] = session
+        session.session = rangingManager?.createRangingSession(myExecutor, session.myRangingSessionCallback)
+        var role: Int
+        var config: RangingConfig
+
+        val rangingDeviceBuilder = RangingDevice.Builder()
+        val rangingDevice = rangingDeviceBuilder.build()
+
+        val deviceHandleBuilder  = DeviceHandle.Builder(rangingDevice, session.handle)
+
+        val blAdap =  (this.getSystemService(BLUETOOTH_SERVICE) as BluetoothManager).getAdapter()
+        val blDevice = blAdap.getRemoteDevice((oobConnector as BLESuper).getPeerAddress())
+        deviceHandleBuilder.setBluetoothDevice(blDevice)
+
+        val deviceHandle = deviceHandleBuilder.build()
+
+        val filter: Set<Int> = setOf(RangingManager.BLE_CS)
+        if (swIsController?.isChecked == true) {
+            role = RangingPreference.DEVICE_ROLE_INITIATOR
+            val configBuilder = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).setRangingTechnologyFilter(filter)
+                configBuilder.setSecurityLevel(OobInitiatorRangingConfig.SECURITY_LEVEL_BASIC)
+            config = configBuilder.build()
+
+        } else {
+            role = RangingPreference.DEVICE_ROLE_RESPONDER
+            config = OobResponderRangingConfig.Builder(deviceHandle).build()
+        }
+        startMeasuring2(config,role,session.session)
+    }
+    private fun WIFISession(){
+        val permissions = mutableListOf(Manifest.permission.BLUETOOTH_CONNECT)
+        if (availableCapabilities.WIFI_RTT) {
+            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+            permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
+        }
+        if(!askPermissions(this, *permissions.toTypedArray()))
+        {
+            return
+        }
+        val session = MultiSession(RangingManager.WIFI_NAN_RTT.toByte())
+        if(sessions.keys.contains(session.key))
+        {
+            Log.d("WIFISession","Session with key ${session.key} already exists")
+            return
+        }
+        sessions[session.key] = session
+        session.session = rangingManager?.createRangingSession(myExecutor, session.myRangingSessionCallback)
+        var role: Int
+        var config: RangingConfig
+
+        val rangingDeviceBuilder = RangingDevice.Builder()
+        val rangingDevice = rangingDeviceBuilder.build()
+        val deviceHandleBuilder  = DeviceHandle.Builder(rangingDevice, session.handle)
+        val deviceHandle = deviceHandleBuilder.build()
+        val filter: Set<Int> = setOf(RangingManager.WIFI_NAN_RTT)
+        if (swIsController?.isChecked == true) {
+            role = RangingPreference.DEVICE_ROLE_INITIATOR
+            val configBuilder = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).setRangingTechnologyFilter(filter)
+            configBuilder.setSecurityLevel(OobInitiatorRangingConfig.SECURITY_LEVEL_BASIC)
+            config = configBuilder.build()
+
+        } else {
+            role = RangingPreference.DEVICE_ROLE_RESPONDER
+            config = OobResponderRangingConfig.Builder(deviceHandle).build()
+        }
+        startMeasuring2(config,role,session.session)
+    }
+    private fun UWBSession(){
+        val permissions = mutableListOf(Manifest.permission.BLUETOOTH_CONNECT)
+        if (availableCapabilities.UWB) {
+            permissions.add(Manifest.permission.RANGING)
+            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+            permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+            permissions.add(Manifest.permission.UWB_RANGING)
+        }
+        if(!askPermissions(this, *permissions.toTypedArray()))
+        {
+            return
+        }
+        val session = MultiSession(RangingManager.UWB.toByte())
+        if(sessions.keys.contains(session.key))
+        {
+            Log.d("UWBSession","Session with key ${session.key} already exists")
+            return
+        }
+        sessions[session.key] = session
+        session.session = rangingManager?.createRangingSession(myExecutor, session.myRangingSessionCallback)
+        var role: Int
+        var config: RangingConfig
+
+        val rangingDeviceBuilder = RangingDevice.Builder()
+        val rangingDevice = rangingDeviceBuilder.build()
+        val deviceHandleBuilder  = DeviceHandle.Builder(rangingDevice, session.handle)
+        val deviceHandle = deviceHandleBuilder.build()
+        val filter: Set<Int> = setOf(RangingManager.UWB)
+
+        if (swIsController?.isChecked == true) {
+            role = RangingPreference.DEVICE_ROLE_INITIATOR
+            val configBuilder = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).setRangingTechnologyFilter(filter)
+                configBuilder.setSecurityLevel(OobInitiatorRangingConfig.SECURITY_LEVEL_SECURE)
+
+            config = configBuilder.build()
+
+        } else {
+            role = RangingPreference.DEVICE_ROLE_RESPONDER
+            config = OobResponderRangingConfig.Builder(deviceHandle).build()
+        }
+        startMeasuring2(config,role,session.session)
+    }
+    private fun AUTOSession(){
+
+    }
+
     /**
-     * Bereitet BLE-RAW sessions vor. Abgegrenzt, da möglicherweise erst eine BLE Verbindung aufgebaut bzw. eine Addresse vom Partner angefordert werden muss.
+     * Bereitet UWB-RAW sessions vor. Abgegrenzt, da möglicherweise erst eine BLE Verbindung aufgebaut bzw. eine Addresse vom Partner angefordert werden muss.
      */
-    private fun startRawSessionForAddress(myAddressData:ByteArray, peerAddressData:ByteArray){
+    private fun UWBRawSession(){
+            //peerAddress = addressStringToByteArray((oobConnector as BLESuper).getPeerAddress()!!)
+            //myAddress = addressStringToByteArray((oobConnector as BLESuper).getMyAddress()!!)
+            var peerAddressData = byteArrayOf(0x48,0x30)
+            var myAddressData = byteArrayOf(0x38,0x32)
+            if(swIsController?.isChecked == true) {
+                val tmp = myAddressData
+                myAddressData = peerAddressData
+                peerAddressData = tmp
+            }
+            Log.d("RawRanging","Peer Address: $peerAddressData; ${byteToHexString(peerAddressData)}")
+            Log.d("RawRanging","My Address: $myAddressData; ${byteToHexString(myAddressData)}")
+
+
+
         val permissions = mutableListOf(Manifest.permission.ACCESS_COARSE_LOCATION)
         permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
         permissions.add(Manifest.permission.RANGING)
         permissions.add(Manifest.permission.UWB_RANGING)
         permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
-
-
-
         if(!askPermissions(this, *permissions.toTypedArray()))
         {
             return
         }
-        if(sessions.size!=0)
-            return
 
-        val session = MultiSession(1)
+
+
+        val session = MultiSession(RangingManager.UWB.toByte())
+        if(sessions.keys.contains(session.key))
+        {
+            Log.d("UWB_RAWSession","Session with key ${session.key} already exists")
+            return
+        }
         sessions[session.key] = session
         session.session = rangingManager?.createRangingSession(myExecutor, session.myRangingSessionCallback)
 
-        /*val address :String = myAddressData.decodeToString()
-        Log.d("RawRanging","Received Address: $address; $myAddressData")*/
-        /*if(!BluetoothAdapter.checkBluetoothAddress(address)){
-            return
-        }*/
+
         var role: Int
         var config: RangingConfig
         val rangingDevice: RangingDevice = RangingDevice.Builder().build()
-        /*val BLECSParams = BleCsRangingParams.Builder(address)
-            .setLocationType(BleCsRangingParams.LOCATION_TYPE_INDOOR)
-            .setRangingUpdateRate(RawRangingDevice.UPDATE_RATE_NORMAL)
-            .setSecurityLevel(BleCsRangingCapabilities.CS_SECURITY_LEVEL_ONE)
-            .setSightType(BleCsRangingParams.SIGHT_TYPE_LINE_OF_SIGHT)
-            .build()*/
         var myAddressData2=myAddressData
         var peerAddressData2=peerAddressData
         if(myAddressData2.size>UwbAddress.EXTENDED_ADDRESS_BYTE_LENGTH)
@@ -832,18 +893,27 @@ open class MainActivity  : AppCompatActivity() {
      */
     @SuppressLint("DefaultLocale")
     public fun gotResult(key : Byte, data : Double){
-        runOnUiThread {
-            tvRangeDisplay?.text = buildString {
-                append(String.format("%.3f", data))
-                append("m")
+        savedResults[key] = data
+        val s = buildString{
+            for(k in savedResults.keys){
+                append(k.toString())
+                append(":")
+                append(String.format("%.3f",savedResults[k]))
+                append(";\n")
             }
+        }
+        runOnUiThread {
+            tvRangeDisplay?.text = s
         }
         if(swMakeLog?.isChecked==true ){
             var s = byteToHexString(key)
+
             s+=data.toString()
             logEntry(LogEntryType.DistMeasurement,s)
         }
     }
+
+
 
     /**
      * Wird genutzt, um die zuletzt empfangenen RangingCapabilities zu speichern
