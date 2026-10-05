@@ -43,8 +43,11 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import android.ranging.uwb.UwbAddress
 import android.ranging.uwb.UwbComplexChannel
+import androidx.core.view.children
 import androidx.core.view.size
 import androidx.media3.common.MimeTypes
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -57,6 +60,7 @@ import java.util.UUID
 import java.util.concurrent.Executor
 import kotlin.byteArrayOf
 import kotlin.experimental.and
+import kotlin.experimental.or
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -71,7 +75,6 @@ const val REQUEST_MEASUREMENT:Byte = 2
 const val STOP_MEASUREMENT:Byte = 3
 const val SHARED_RESULT:Byte = 4
 const val DATA_PACKAGE  :Byte = 0b00001000
-const val DATA_PACKAGE2 :Byte = 0b00011000
 
 
 open class MainActivity  : AppCompatActivity() {
@@ -91,7 +94,7 @@ open class MainActivity  : AppCompatActivity() {
     private var disconnectButton: Button? = null
     private var startMeasuringButton: Button? = null
     private var stopMeasuringButton: Button? = null
-    private var rgTecRANG: RadioGroup? = null
+    private var rgTecRANG: ChipGroup? = null
 
 
     private val uiMode = object {
@@ -145,6 +148,7 @@ open class MainActivity  : AppCompatActivity() {
 
                 swMakeLog?.isEnabled = true
                 swUseGNSS?.isEnabled = true
+
                 toggleRadioGroup(rgTecRANG!!,true)
             }
         }
@@ -221,8 +225,8 @@ open class MainActivity  : AppCompatActivity() {
             }
 
             when(mode){
-                START_MEASUREMENT -> startMeasuringOrder(RangingTechnology.entries[key.toInt()])
-                REQUEST_MEASUREMENT -> requestMeasuring(RangingTechnology.entries[key.toInt()])
+                START_MEASUREMENT -> startMeasuringOrder(key)
+                REQUEST_MEASUREMENT -> requestMeasuring(key)
                 STOP_MEASUREMENT -> stopMeasuring()
                 SHARED_RESULT -> gotResult(key, byteArrayToDouble(realData))
                 DATA_PACKAGE -> {
@@ -241,14 +245,14 @@ open class MainActivity  : AppCompatActivity() {
         /**
          * StartMeasuring Paket wurde empfangen
          */
-        fun startMeasuringOrder(mode:RangingTechnology) {
+        fun startMeasuringOrder(mode:Byte) {
             setRangingTechnology(mode)
             startMeasuring()
         }
         /**
          * RequestMeasuring Paket wurde empfangen
          */
-        fun requestMeasuring(mode:RangingTechnology) {
+        fun requestMeasuring(mode:Byte) {
             setRangingTechnology(mode)
             startMeasuringBtn()
         }
@@ -303,6 +307,7 @@ open class MainActivity  : AppCompatActivity() {
         val myRangingSessionCallback = object : RangingSession.Callback {
             override fun onClosed(p0: Int) {
                 Log.d("RangingResult", "session $key onClosed: $p0")
+                savedResults.remove(key)
                 removeSelf()
             }
 
@@ -340,10 +345,12 @@ open class MainActivity  : AppCompatActivity() {
 
             override fun onStarted(p0: RangingDevice, p1: Int) {
                 Log.d("RangingResult", "session $key onStarted $p1")
+                logMeasuring(LogEntryType.StartedMeasuring,key,"UuidOfPartner:${p0.uuid}")
             }
 
             override fun onStopped(p0: RangingDevice, p1: Int) {
                 Log.d("RangingResult", "session $key onStopped $p1")
+                logMeasuring(LogEntryType.StoppedMeasuring,key,"")
                 session?.close()
             }
         }
@@ -452,7 +459,7 @@ open class MainActivity  : AppCompatActivity() {
     /**
      * steuert die Art der Ranging Verbindung, wird durch UI oder Partnergerät gesetzt
      */
-    private var rangingMode = RangingTechnology.AUTO
+    private var rangingMode :Byte = 0
 
     /**
      * Activity Result Handler für die Log Datei
@@ -492,26 +499,33 @@ open class MainActivity  : AppCompatActivity() {
         startMeasuringButton!!.setOnClickListener  { _ -> startMeasuringBtn() }
         stopMeasuringButton = findViewById<Button>(R.id.StopMsgBtn)
         stopMeasuringButton!!.setOnClickListener  { _ -> stopMeasuringBtn() }
-        rgTecRANG = findViewById<RadioGroup>(R.id.rgTechnologyRanging)
+        rgTecRANG = findViewById<ChipGroup>(R.id.rgTechnologyRanging)
 
 
-        findViewById<RadioButton>(R.id.rbTecRangAUTO).setOnCheckedChangeListener { _, isChecked ->
-            if(isChecked)rangingMode = RangingTechnology.AUTO
+
+        findViewById<Chip>(R.id.rbTecRangWIFI).setOnCheckedChangeListener { _, isChecked ->
+            var temp:Byte = rangingMode and ((1 shl RangingTechnology.WIFI.ordinal).inv().toByte())
+            val b = if(isChecked) 0x1 else 0x0
+            temp = temp or (b shl RangingTechnology.WIFI.ordinal).toByte()
+            rangingMode=temp
         }
-        findViewById<RadioButton>(R.id.rbTecRangWIFI).setOnCheckedChangeListener { _, isChecked ->
-            if(isChecked)rangingMode = RangingTechnology.WIFI
+        findViewById<Chip>(R.id.rbTecRangUWB).setOnCheckedChangeListener { _, isChecked ->
+            var temp:Byte = rangingMode and ((1 shl RangingTechnology.UWB.ordinal).inv().toByte())
+            val b = if(isChecked) 0x1 else 0x0
+            temp = temp or (b shl RangingTechnology.UWB.ordinal).toByte()
+            rangingMode=temp
         }
-        findViewById<RadioButton>(R.id.rbTecRangUWB).setOnCheckedChangeListener { _, isChecked ->
-            if(isChecked)rangingMode = RangingTechnology.UWB
+        findViewById<Chip>(R.id.rbTecRangBLE).setOnCheckedChangeListener { _, isChecked ->
+            var temp:Byte = rangingMode and ((1 shl RangingTechnology.BLE.ordinal).inv().toByte())
+            val b = if(isChecked) 0x1 else 0x0
+            temp = temp or (b shl RangingTechnology.BLE.ordinal).toByte()
+            rangingMode=temp
         }
-        findViewById<RadioButton>(R.id.rbTecRangBLE).setOnCheckedChangeListener { _, isChecked ->
-            if(isChecked)rangingMode = RangingTechnology.BLE
-        }
-        findViewById<RadioButton>(R.id.rbTecRangUWBRAW).setOnCheckedChangeListener { _, isChecked ->
-            if(isChecked)rangingMode = RangingTechnology.UWB_RAW
-        }
-        findViewById<RadioButton>(R.id.rbTecRangMULTI).setOnCheckedChangeListener { _, isChecked ->
-            if(isChecked)rangingMode = RangingTechnology.MULTI
+        findViewById<Chip>(R.id.rbTecRangUWBRAW).setOnCheckedChangeListener { _, isChecked ->
+            var temp:Byte = rangingMode and ((1 shl RangingTechnology.UWB_RAW.ordinal).inv().toByte())
+            val b = if(isChecked) 0x1 else 0x0
+            temp = temp or (b shl RangingTechnology.UWB_RAW.ordinal).toByte()
+            rangingMode=temp
         }
 
     }
@@ -554,7 +568,7 @@ open class MainActivity  : AppCompatActivity() {
      */
     private fun startMeasuringBtn(){
         if(swIsController?.isChecked==true){
-            oobConnector?.sendMessage(byteArrayOf(REQUEST_MEASUREMENT,rangingMode.ordinal.toByte()))
+            oobConnector?.sendMessage(byteArrayOf(REQUEST_MEASUREMENT,rangingMode))
         }
         else{
             startMeasuring()
@@ -566,33 +580,34 @@ open class MainActivity  : AppCompatActivity() {
      */
     @SuppressLint("NewApi", "MissingPermission", "SetTextI18n")
     private fun startMeasuring(){
-        when(rangingMode){
-            RangingTechnology.MULTI -> {
-                UWBRawSession()
-                WIFISession()
-                BLESession()
+        savedResults = mutableMapOf()
+        runOnUiThread {
+            exception?.setText("")
+        }
+        val myMode = rangingMode
+        Log.d("startMsrng","Start measuring technologies $myMode")
+        if((myMode and (1 shl RangingTechnology.UWB_RAW.ordinal).toByte()) != 0.toByte()){
+            Log.d("startMsrng","UWB_RAW")
+            UWBRawSession()
+        }
+        if((myMode and (1 shl RangingTechnology.UWB.ordinal).toByte()) != 0.toByte()){
+            Log.d("startMsrng","UWB")
+            UWBSession()
+        }
+        if((myMode and (1 shl RangingTechnology.WIFI.ordinal).toByte()) != 0.toByte()){
+            Log.d("startMsrng","WIFI")
+            WIFISession()
+        }
 
-            }
-            RangingTechnology.UWB_RAW -> {
-                UWBRawSession()
-            }
-            RangingTechnology.BLE -> {
-                BLESession()
-            }
-            RangingTechnology.UWB -> {
-                UWBSession()
-            }
-            RangingTechnology.WIFI -> {
-                WIFISession()
-            }
-            RangingTechnology.AUTO -> {
-                AUTOSession()
-            }
+        if((myMode and (1 shl RangingTechnology.BLE.ordinal).toByte()) != 0.toByte()){
+            Log.d("startMsrng","BLE")
+            BLESession()
         }
 
         if(swIsController?.isChecked == false)//normally false in case of only OOB
         {
-            oobConnector?.sendMessage(byteArrayOf(START_MEASUREMENT,rangingMode.ordinal.toByte()))
+            Log.d("startMsrng","other: $myMode")
+            oobConnector?.sendMessage(byteArrayOf(START_MEASUREMENT,myMode))
         }
         if(swUseGNSS?.isChecked == true){
             gnssProvider = GnssMeasurementProvider(this as Activity, this as Context,gnssListener)
@@ -641,7 +656,7 @@ open class MainActivity  : AppCompatActivity() {
         if (swIsController?.isChecked == true) {
             role = RangingPreference.DEVICE_ROLE_INITIATOR
             val configBuilder = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).setRangingTechnologyFilter(filter)
-                configBuilder.setSecurityLevel(OobInitiatorRangingConfig.SECURITY_LEVEL_BASIC)
+            configBuilder.setSecurityLevel(OobInitiatorRangingConfig.SECURITY_LEVEL_BASIC)
             config = configBuilder.build()
 
         } else {
@@ -719,9 +734,7 @@ open class MainActivity  : AppCompatActivity() {
 
         if (swIsController?.isChecked == true) {
             role = RangingPreference.DEVICE_ROLE_INITIATOR
-            val configBuilder = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).setRangingTechnologyFilter(filter)
-                configBuilder.setSecurityLevel(OobInitiatorRangingConfig.SECURITY_LEVEL_SECURE)
-
+            val configBuilder = OobInitiatorRangingConfig.Builder().addDeviceHandle(deviceHandle).setRangingTechnologyFilter(filter).setSecurityLevel(OobInitiatorRangingConfig.SECURITY_LEVEL_SECURE)
             config = configBuilder.build()
 
         } else {
@@ -730,13 +743,6 @@ open class MainActivity  : AppCompatActivity() {
         }
         startMeasuring2(config,role,session.session)
     }
-    private fun AUTOSession(){
-
-    }
-
-    /**
-     * Bereitet UWB-RAW sessions vor. Abgegrenzt, da möglicherweise erst eine BLE Verbindung aufgebaut bzw. eine Addresse vom Partner angefordert werden muss.
-     */
     private fun UWBRawSession(){
             //peerAddress = addressStringToByteArray((oobConnector as BLESuper).getPeerAddress()!!)
             //myAddress = addressStringToByteArray((oobConnector as BLESuper).getMyAddress()!!)
@@ -857,6 +863,7 @@ open class MainActivity  : AppCompatActivity() {
         } else {
             BleClient(this, oobCallback, connectButton!!)
         }
+        uiMode.startConnecting()
     }
 
     /**
@@ -866,7 +873,7 @@ open class MainActivity  : AppCompatActivity() {
     public fun logEntry(type:LogEntryType,msg:String){
         if(logEntries==null||swMakeLog?.isChecked==false)
             return
-        var s = "[${dateTimeString()}],${type.name},"
+        var s = "[${dateTimeString()}],${type.name}:"
         s+= msg
         s+= "\n"
         logEntries?.add(s)
@@ -906,10 +913,17 @@ open class MainActivity  : AppCompatActivity() {
             tvRangeDisplay?.text = s
         }
         if(swMakeLog?.isChecked==true ){
-            var s = byteToHexString(key)
 
-            s+=data.toString()
+            val s = "Technology:${byteToHexString(key)}Distance:${data.toString()};"
+
             logEntry(LogEntryType.DistMeasurement,s)
+        }
+    }
+
+    public fun logMeasuring(type:LogEntryType,key:Byte,msg:String){
+        if(swMakeLog?.isChecked==true ) {
+            val s = "Technology:${byteToHexString(key)}${msg};"
+            logEntry(type, s)
         }
     }
 
@@ -1052,20 +1066,28 @@ open class MainActivity  : AppCompatActivity() {
      * wird genutzt, um die aktuell ausgewählte Ranging Technologie zu speichern und zu kommunizieren
      */
     enum class RangingTechnology{
-        AUTO,WIFI,BLE,UWB_RAW,UWB,MULTI    //Reihenfolge muss der der UI entsprechen
+        WIFI,BLE,UWB_RAW,UWB    //Reihenfolge muss der der UI entsprechen
     }
 
     enum class LogEntryType{
-        DistMeasurement,GnssLocation,GnssMeasurement,GnssNavigation,GnssStatus,GnssNmea,GnssTTFF
+        DistMeasurement,GnssLocation,GnssMeasurement,GnssNavigation,GnssStatus,GnssNmea,GnssTTFF,StartedMeasuring,StoppedMeasuring
     }
 
     /**
      * passt die UI und lokale Variable an, wenn vom anderen Gerät eine andere Ranging Technologie verlangt wird
      */
-    private fun setRangingTechnology(mode: RangingTechnology){
+    private fun setRangingTechnology(mode: Byte){
         rangingMode = mode
+        Log.d("RNGTEC","set $mode ")
         runOnUiThread{
-            rgTecRANG?.check(rgTecRANG!!.getChildAt(mode.ordinal).id)
+            rgTecRANG?.clearCheck()
+            val ids = rgTecRANG?.children!!.map{it.id}.toList()
+            for( i in 0..<rgTecRANG?.size!!){
+                if((mode and ((1 shl i).toByte())) != 0.toByte()){
+                    Log.d("RNGTEC","check $i ")
+                    rgTecRANG?.check(ids[i])
+                }
+            }
         }
     }
 
@@ -1107,9 +1129,9 @@ open class MainActivity  : AppCompatActivity() {
         /**
          * Setzt alle RadioButtons einer RadioGroup auf (nicht) klickbar
          */
-        fun toggleRadioGroup(rg:RadioGroup,enabled:Boolean){
+        fun toggleRadioGroup(rg:ChipGroup,enabled:Boolean){
             for (i in 0 until rg.size){
-                rg.getChildAt(i).isEnabled = enabled
+                //rg.getChildAt(i).isEnabled = enabled
             }
         }
 

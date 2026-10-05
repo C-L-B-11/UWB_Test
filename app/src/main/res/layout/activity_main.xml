@@ -44,42 +44,61 @@
             app:layout_constraintTop_toBottomOf="@+id/bar" />
 
 
-        <RadioGroup
+        <com.google.android.material.chip.ChipGroup
             android:id="@+id/rgTechnologyRanging"
-            android:layout_width="wrap_content"
+            android:layout_width="120dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="10dp"
 
             app:layout_constraintStart_toEndOf="@+id/tvTechnologyRanging"
+            app:layout_constraintTop_toTopOf="@+id/tvTechnologyRanging"
+            app:singleLine="false"
+            app:singleSelection="false">
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/rbTecRangWIFI"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checkable="true"
+                android:text="WIFI" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/rbTecRangBLE"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checkable="true"
+                android:text="BLE" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/rbTecRangUWBRAW"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checkable="true"
+                android:text="UWB RAW" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/rbTecRangUWB"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checkable="true"
+                android:text="UWB" />
+
+
+        </com.google.android.material.chip.ChipGroup>
+
+        <LinearLayout
+            android:id="@+id/llTechnologyRanging"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+
+            android:orientation="vertical"
+            app:layout_constraintStart_toEndOf="@+id/tvTechnologyRanging"
             app:layout_constraintTop_toTopOf="@+id/tvTechnologyRanging" >
 
-            <RadioButton
-                android:id="@+id/rbTecRangAUTO"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checked="true"
-                android:text="AUTO" />
-            <RadioButton android:id="@+id/rbTecRangWIFI"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="WIFI"/>
-            <RadioButton android:id="@+id/rbTecRangBLE"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="BLE"/>
-            <RadioButton android:id="@+id/rbTecRangUWBRAW"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="UWB RAW"/>
-            <RadioButton android:id="@+id/rbTecRangUWB"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="UWB"/>
-            <RadioButton android:id="@+id/rbTecRangMULTI"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="MULTI"/>
-        </RadioGroup>
+        </LinearLayout>
+
+
         <TextView
             android:id="@+id/tvIsController"
             android:layout_width="wrap_content"
@@ -222,6 +241,7 @@
 
 
     </androidx.constraintlayout.widget.ConstraintLayout>
+
 
 
 
