@@ -50,6 +50,7 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="10dp"
 
+            app:chipSpacingHorizontal="40dp"
             app:layout_constraintStart_toEndOf="@+id/tvTechnologyRanging"
             app:layout_constraintTop_toTopOf="@+id/tvTechnologyRanging"
             app:singleLine="false"

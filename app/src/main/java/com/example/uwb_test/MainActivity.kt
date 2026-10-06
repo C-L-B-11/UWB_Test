@@ -98,7 +98,7 @@ open class MainActivity  : AppCompatActivity() {
 
 
     private val uiMode = object {
-        private var mode = UiMode.Idle
+        var mode = UiMode.Idle
 
         fun startConnecting(){
             if(mode!=UiMode.Idle)
@@ -138,7 +138,7 @@ open class MainActivity  : AppCompatActivity() {
             }
         }
         fun stoppedMeasuring(){
-            if(mode!= UiMode.Measuring)
+            if(mode!= UiMode.Closing)
                 return
             mode = UiMode.Connected
             runOnUiThread {
@@ -150,6 +150,15 @@ open class MainActivity  : AppCompatActivity() {
                 swUseGNSS?.isEnabled = true
 
                 toggleRadioGroup(rgTecRANG!!,true)
+            }
+        }
+        fun stopMeasuring(){
+            if(mode!= UiMode.Measuring)
+                return
+            mode = UiMode.Closing
+            runOnUiThread {
+                stopMeasuringButton?.isEnabled = false
+                disconnectButton?.isEnabled = true
             }
         }
         fun disconnected(){
@@ -260,9 +269,11 @@ open class MainActivity  : AppCompatActivity() {
          * StopMeasuring Paket wurde empfangen
          */
         fun stopMeasuring() {
+            uiMode.stopMeasuring()
             for(s in sessions.values){
                 s.session?.stop()
             }
+
         }
 
         /**
@@ -277,6 +288,7 @@ open class MainActivity  : AppCompatActivity() {
 
 
     inner class MultiSession(val key:Byte){
+        var mode : SessionMode = SessionMode.Closed
         val handle = object :  HandleCallback {
                 var callbackExecuter : Executor? = null
                 var callbackFunction : TransportHandle.ReceiveCallback? = null
@@ -308,6 +320,7 @@ open class MainActivity  : AppCompatActivity() {
             override fun onClosed(p0: Int) {
                 Log.d("RangingResult", "session $key onClosed: $p0")
                 savedResults.remove(key)
+                mode = SessionMode.Closed
                 removeSelf()
             }
 
@@ -318,11 +331,12 @@ open class MainActivity  : AppCompatActivity() {
                 runOnUiThread {
                     exception?.text = "session $key Failed to start ranging. Reason: $p0"
                 }
-                removeSelf()
+                session?.close()
             }
 
             override fun onOpened() {
                 Log.d("RangingResult", "session $key onOpened")
+                mode = SessionMode.Open
                 uiMode.startedMeasuring()
             }
 
@@ -346,11 +360,13 @@ open class MainActivity  : AppCompatActivity() {
             override fun onStarted(p0: RangingDevice, p1: Int) {
                 Log.d("RangingResult", "session $key onStarted $p1")
                 logMeasuring(LogEntryType.StartedMeasuring,key,"UuidOfPartner:${p0.uuid}")
+                mode = SessionMode.Running
             }
 
             override fun onStopped(p0: RangingDevice, p1: Int) {
                 Log.d("RangingResult", "session $key onStopped $p1")
                 logMeasuring(LogEntryType.StoppedMeasuring,key,"")
+                mode = SessionMode.Open
                 session?.close()
             }
         }
@@ -364,7 +380,12 @@ open class MainActivity  : AppCompatActivity() {
     fun saveRemoveSessions(key:Byte){
         sessions.remove(key)
         if(sessions.size==0){
-            stopMeasuring()
+            if(uiMode.mode == UiMode.Measuring)
+            {
+                stopMeasuringBtn()
+            }
+            else
+                stopMeasuring()
         }
     }
 
@@ -373,11 +394,6 @@ open class MainActivity  : AppCompatActivity() {
      * Referenz auf das Context Objekt
      */
     private var rangingManager :RangingManager?  = null
-
-    /**
-     *  unterhält/steuert das Ranging
-     */
-    //private var rangingSession : RangingSession? = null
 
     /**
      *  gibt Ergebnisse und Status des Rangings zurück
@@ -514,6 +530,8 @@ open class MainActivity  : AppCompatActivity() {
             val b = if(isChecked) 0x1 else 0x0
             temp = temp or (b shl RangingTechnology.UWB.ordinal).toByte()
             rangingMode=temp
+            if(isChecked)
+                findViewById<Chip>(R.id.rbTecRangUWBRAW).isChecked = false
         }
         findViewById<Chip>(R.id.rbTecRangBLE).setOnCheckedChangeListener { _, isChecked ->
             var temp:Byte = rangingMode and ((1 shl RangingTechnology.BLE.ordinal).inv().toByte())
@@ -526,6 +544,8 @@ open class MainActivity  : AppCompatActivity() {
             val b = if(isChecked) 0x1 else 0x0
             temp = temp or (b shl RangingTechnology.UWB_RAW.ordinal).toByte()
             rangingMode=temp
+            if(isChecked)
+                findViewById<Chip>(R.id.rbTecRangUWB).isChecked = false
         }
 
     }
@@ -543,10 +563,16 @@ open class MainActivity  : AppCompatActivity() {
      * Stoppe die Ranging Verbindung, wird indirekt durch UI oder vom transportHandle aufgerufen
      */
     private fun stopMeasuring(){
+        if(uiMode.mode == UiMode.Measuring)
+            uiMode.stopMeasuring()
+        if(sessions.isNotEmpty()){
 
-        if(sessions.size>0){
             for(s in sessions){
-                s.value.session?.stop() ?:sessions.remove(s.key)
+                when (s.value.mode) {
+                    SessionMode.Closed -> saveRemoveSessions(s.key)
+                    SessionMode.Running -> s.value.session?.stop() ?: saveRemoveSessions(s.key)
+                    SessionMode.Open -> s.value.session?.close() ?: saveRemoveSessions(s.key)
+                }
             }
         }
         else{
@@ -626,6 +652,7 @@ open class MainActivity  : AppCompatActivity() {
             permissions.add(Manifest.permission.BLUETOOTH_SCAN)
             permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
         }
+        else return
         if(!askPermissions(this, *permissions.toTypedArray()))
         {
             return
@@ -646,7 +673,7 @@ open class MainActivity  : AppCompatActivity() {
 
         val deviceHandleBuilder  = DeviceHandle.Builder(rangingDevice, session.handle)
 
-        val blAdap =  (this.getSystemService(BLUETOOTH_SERVICE) as BluetoothManager).getAdapter()
+        val blAdap =  (this.getSystemService(BLUETOOTH_SERVICE) as BluetoothManager).adapter
         val blDevice = blAdap.getRemoteDevice((oobConnector as BLESuper).getPeerAddress())
         deviceHandleBuilder.setBluetoothDevice(blDevice)
 
@@ -671,6 +698,7 @@ open class MainActivity  : AppCompatActivity() {
             permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
             permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
         }
+        else return
         if(!askPermissions(this, *permissions.toTypedArray()))
         {
             return
@@ -711,6 +739,7 @@ open class MainActivity  : AppCompatActivity() {
             permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
             permissions.add(Manifest.permission.UWB_RANGING)
         }
+        else return
         if(!askPermissions(this, *permissions.toTypedArray()))
         {
             return
@@ -1051,16 +1080,9 @@ open class MainActivity  : AppCompatActivity() {
         logEntries = null
     }
 
-    private enum class UiMode{
-        Idle, Connecting,Connected,Measuring
-    }
+    private enum class UiMode{ Idle, Connecting,Connected,Measuring,Closing}
 
-    /**
-     * wird genutzt, um die aktuell ausgewählte OOB Technologie zu speichern
-     */
-    enum class OOBTechnology{
-        BLE,WIFIDirect,WIFIAware
-    }
+    enum class SessionMode{Closed,Open,Running}
 
     /**
      * wird genutzt, um die aktuell ausgewählte Ranging Technologie zu speichern und zu kommunizieren
@@ -1131,7 +1153,7 @@ open class MainActivity  : AppCompatActivity() {
          */
         fun toggleRadioGroup(rg:ChipGroup,enabled:Boolean){
             for (i in 0 until rg.size){
-                //rg.getChildAt(i).isEnabled = enabled
+                (rg.getChildAt(i) as Chip).isEnabled = enabled
             }
         }
 
