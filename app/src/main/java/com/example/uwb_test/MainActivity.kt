@@ -33,8 +33,6 @@ import android.ranging.uwb.UwbRangingParams
 import android.util.Log
 import android.view.WindowManager
 import android.widget.Button
-import android.widget.RadioButton
-import android.widget.RadioGroup
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
@@ -74,6 +72,9 @@ const val START_MEASUREMENT:Byte = 1
 const val REQUEST_MEASUREMENT:Byte = 2
 const val STOP_MEASUREMENT:Byte = 3
 const val SHARED_RESULT:Byte = 4
+const val CLOSED_SESSION:Byte = 5
+const val STARTED_SESSION:Byte = 6
+const val RESTART_SESSION:Byte = 7
 const val DATA_PACKAGE  :Byte = 0b00001000
 
 
@@ -238,6 +239,9 @@ open class MainActivity  : AppCompatActivity() {
                 REQUEST_MEASUREMENT -> requestMeasuring(key)
                 STOP_MEASUREMENT -> stopMeasuring()
                 SHARED_RESULT -> gotResult(key, byteArrayToDouble(realData))
+                CLOSED_SESSION -> closedSession(key)
+                STARTED_SESSION -> startedSession(key)
+                RESTART_SESSION -> restartSession(key)
                 DATA_PACKAGE -> {
                     if(sessions.containsKey(key)){
                         sessions[key]?.handle?.receiveData(realData)
@@ -289,6 +293,8 @@ open class MainActivity  : AppCompatActivity() {
 
     inner class MultiSession(val key:Byte){
         var mode : SessionMode = SessionMode.Closed
+
+        var modePartner : SessionMode = SessionMode.Closed
         val handle = object :  HandleCallback {
                 var callbackExecuter : Executor? = null
                 var callbackFunction : TransportHandle.ReceiveCallback? = null
@@ -316,12 +322,22 @@ open class MainActivity  : AppCompatActivity() {
 
         var session: RangingSession?=null
 
+        var preference:RangingPreference?=null
+
         val myRangingSessionCallback = object : RangingSession.Callback {
             override fun onClosed(p0: Int) {
                 Log.d("RangingResult", "session $key onClosed: $p0")
                 savedResults.remove(key)
                 mode = SessionMode.Closed
-                removeSelf()
+                oobConnector?.sendMessage(byteArrayOf(CLOSED_SESSION,key))
+                if(uiMode.mode == UiMode.Closing) {
+                    removeSelf()
+                }
+                else  {
+
+                    //session?.start(preference!!)
+
+                }
             }
 
             @SuppressLint("SetTextI18n")
@@ -361,6 +377,7 @@ open class MainActivity  : AppCompatActivity() {
                 Log.d("RangingResult", "session $key onStarted $p1")
                 logMeasuring(LogEntryType.StartedMeasuring,key,"UuidOfPartner:${p0.uuid}")
                 mode = SessionMode.Running
+                oobConnector?.sendMessage(byteArrayOf(STARTED_SESSION,key))
             }
 
             override fun onStopped(p0: RangingDevice, p1: Int) {
@@ -379,7 +396,7 @@ open class MainActivity  : AppCompatActivity() {
 
     fun saveRemoveSessions(key:Byte){
         sessions.remove(key)
-        if(sessions.size==0){
+        if(sessions.isEmpty()){
             if(uiMode.mode == UiMode.Measuring)
             {
                 stopMeasuringBtn()
@@ -389,15 +406,33 @@ open class MainActivity  : AppCompatActivity() {
         }
     }
 
+    fun closedSession(key:Byte){
+        if(sessions.containsKey(key)) {
+            val session = sessions[key]!!
+            session.modePartner = SessionMode.Closed
+
+            if(uiMode.mode == UiMode.Measuring && session.mode == SessionMode.Closed)
+            {
+                //oobConnector?.sendMessage(byteArrayOf(RESTART_SESSION,key))
+                //session.session?.start(session.preference!!)
+            }
+        }
+    }
+
+    fun startedSession(key:Byte){
+        if(sessions.containsKey(key))
+            sessions[key]?.modePartner = SessionMode.Running
+    }
+    fun restartSession(key:Byte){
+        if(sessions.containsKey(key)){
+            sessions[key]?.session?.start(sessions[key]?.preference!!)
+        }
+    }
 
     /**
      * Referenz auf das Context Objekt
      */
     private var rangingManager :RangingManager?  = null
-
-    /**
-     *  gibt Ergebnisse und Status des Rangings zurück
-     */
 
     /**
      * Callback für die Ranging Capabilities
@@ -566,12 +601,16 @@ open class MainActivity  : AppCompatActivity() {
         if(uiMode.mode == UiMode.Measuring)
             uiMode.stopMeasuring()
         if(sessions.isNotEmpty()){
-
-            for(s in sessions){
-                when (s.value.mode) {
-                    SessionMode.Closed -> saveRemoveSessions(s.key)
-                    SessionMode.Running -> s.value.session?.stop() ?: saveRemoveSessions(s.key)
-                    SessionMode.Open -> s.value.session?.close() ?: saveRemoveSessions(s.key)
+            val keys = sessions.keys.toSet()
+            for(k in keys){
+                if(sessions.containsKey(k)) {
+                    val s = sessions[k]
+                    when (s?.mode) {
+                        SessionMode.Closed -> saveRemoveSessions(k)
+                        SessionMode.Running -> s.session?.stop() ?: saveRemoveSessions(k)
+                        SessionMode.Open -> s.session?.close() ?: saveRemoveSessions(k)
+                        else -> {saveRemoveSessions(k)}
+                    }
                 }
             }
         }
@@ -609,6 +648,8 @@ open class MainActivity  : AppCompatActivity() {
         savedResults = mutableMapOf()
         runOnUiThread {
             exception?.setText("")
+            tvRangeDisplay?.text = "0,000m"
+
         }
         val myMode = rangingMode
         Log.d("startMsrng","Start measuring technologies $myMode")
@@ -690,7 +731,8 @@ open class MainActivity  : AppCompatActivity() {
             role = RangingPreference.DEVICE_ROLE_RESPONDER
             config = OobResponderRangingConfig.Builder(deviceHandle).build()
         }
-        startMeasuring2(config,role,session.session)
+        session.preference = startMeasuring2(config,role)
+        session.session!!.start(session.preference!!)
     }
     private fun WIFISession(){
         val permissions = mutableListOf(Manifest.permission.BLUETOOTH_CONNECT)
@@ -729,7 +771,8 @@ open class MainActivity  : AppCompatActivity() {
             role = RangingPreference.DEVICE_ROLE_RESPONDER
             config = OobResponderRangingConfig.Builder(deviceHandle).build()
         }
-        startMeasuring2(config,role,session.session)
+        session.preference = startMeasuring2(config,role)
+        session.session!!.start(session.preference!!)
     }
     private fun UWBSession(){
         val permissions = mutableListOf(Manifest.permission.BLUETOOTH_CONNECT)
@@ -770,7 +813,8 @@ open class MainActivity  : AppCompatActivity() {
             role = RangingPreference.DEVICE_ROLE_RESPONDER
             config = OobResponderRangingConfig.Builder(deviceHandle).build()
         }
-        startMeasuring2(config,role,session.session)
+        session.preference = startMeasuring2(config,role)
+        session.session!!.start(session.preference!!)
     }
     private fun UWBRawSession(){
             //peerAddress = addressStringToByteArray((oobConnector as BLESuper).getPeerAddress()!!)
@@ -851,22 +895,21 @@ open class MainActivity  : AppCompatActivity() {
             config = RawResponderRangingConfig.Builder().setRawRangingDevice(rawDevice).build()
             Log.d("RawRanging","I AM RESPONDER")
         }
-        startMeasuring2(config,role,session.session)
+        session.preference = startMeasuring2(config,role)
+        session.session!!.start(session.preference!!)
     }
 
     /**
      * startet mit fertigen Configs endgültig das Ranging
      */
     @SuppressLint("SetTextI18n")
-    private fun startMeasuring2(config : RangingConfig, role :Int,rangingSession: RangingSession?){
-        runOnUiThread {
-            tvRangeDisplay?.text = "0,000m"
-        }
+    private fun startMeasuring2(config : RangingConfig, role :Int): RangingPreference{
+
         val dataConfig = DataNotificationConfig.Builder().setNotificationConfigType(
             DataNotificationConfig.NOTIFICATION_CONFIG_ENABLE).build()
         val rangingSessionConfig : SessionConfig = SessionConfig.Builder().setDataNotificationConfig(dataConfig).build()
         val rangingPreference: RangingPreference =  RangingPreference.Builder(role, config).setSessionConfig(rangingSessionConfig).build()
-        rangingSession?.start(rangingPreference)
+        return rangingPreference
     }
 
 
