@@ -272,13 +272,13 @@ open class MainActivity  : AppCompatActivity() {
         /**
          * StopMeasuring Paket wurde empfangen
          */
-        fun stopMeasuring() {
+        /*fun stopMeasuring() {
             uiMode.stopMeasuring()
             for(s in sessions.values){
                 s.session?.stop()
             }
 
-        }
+        }*/
 
         /**
          * Member von OOBConnectionCallback
@@ -334,7 +334,7 @@ open class MainActivity  : AppCompatActivity() {
                     removeSelf()
                 }
                 else  {
-
+                    //removeSelf()
                     //session?.start(preference!!)
 
                 }
@@ -410,6 +410,8 @@ open class MainActivity  : AppCompatActivity() {
         if(sessions.containsKey(key)) {
             val session = sessions[key]!!
             session.modePartner = SessionMode.Closed
+            if(session.mode == SessionMode.Running)
+                session.session?.stop()
 
             if(uiMode.mode == UiMode.Measuring && session.mode == SessionMode.Closed)
             {
@@ -599,7 +601,10 @@ open class MainActivity  : AppCompatActivity() {
      */
     private fun stopMeasuring(){
         if(uiMode.mode == UiMode.Measuring)
+        {
             uiMode.stopMeasuring()
+            Log.d("Mode","Ui in closing Mode")
+        }
         if(sessions.isNotEmpty()){
             val keys = sessions.keys.toSet()
             for(k in keys){
