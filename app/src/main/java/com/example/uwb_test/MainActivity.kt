@@ -237,7 +237,12 @@ open class MainActivity  : AppCompatActivity() {
             when(mode){
                 START_MEASUREMENT -> startMeasuringOrder(key)
                 REQUEST_MEASUREMENT -> requestMeasuring(key)
-                STOP_MEASUREMENT -> stopMeasuring()
+                STOP_MEASUREMENT -> {
+                    if(uiMode.mode == UiMode.Measuring){
+                        oobConnector?.sendMessage(byteArrayOf(STOP_MEASUREMENT))
+                    }
+                    stopMeasuring()
+                }
                 SHARED_RESULT -> gotResult(key, byteArrayToDouble(realData))
                 CLOSED_SESSION -> closedSession(key)
                 STARTED_SESSION -> startedSession(key)
@@ -415,8 +420,8 @@ open class MainActivity  : AppCompatActivity() {
 
             if(uiMode.mode == UiMode.Measuring && session.mode == SessionMode.Closed)
             {
-                //oobConnector?.sendMessage(byteArrayOf(RESTART_SESSION,key))
-                //session.session?.start(session.preference!!)
+                oobConnector?.sendMessage(byteArrayOf(RESTART_SESSION,key))
+                session.session?.start(session.preference!!)
             }
         }
     }
@@ -592,8 +597,13 @@ open class MainActivity  : AppCompatActivity() {
      */
     private fun stopMeasuringBtn()
     {
+        if(uiMode.mode == UiMode.Measuring)
+        {
+            uiMode.stopMeasuring()
+            Log.d("Mode","Ui in closing Mode")
+        }
         oobConnector?.sendMessage(byteArrayOf(STOP_MEASUREMENT))
-        stopMeasuring()
+        //stopMeasuring()
     }
 
     /**
