@@ -31,6 +31,9 @@ DIST_RE = re.compile(
     r"\[[^\]]*\],DistMeasurement:Technology:(\d+);Distance:([-+0-9.eE]+);"
 )
 
+names = ["UWB","BLE","WIFI"]
+colors=["green","blue","red"]
+
 # 0.255,12:32,
 REF_RE = re.compile(r"^\s*([-+0-9.]+)\s*,\s*(\d{1,2}):(\d{2})")
 
@@ -84,7 +87,7 @@ def plot_counts(data):
         shift = (i - (len(techs) - 1) / 2) * width
         positions = [j + shift for j in range(len(distances))]
         bars = ax.bar(
-            positions, [counts[t][d] for d in distances], width, label=f"Technology {t}"
+            positions, [counts[t][d] for d in distances], width, label=f"Technology {names[int(t)]}",color=colors[int(t)]
         )
         ax.bar_label(bars, fontsize=7, padding=2)
  
@@ -155,7 +158,7 @@ def main():
         hi = max(max(xs), max(ys))
         ax.plot([lo, hi], [lo, hi], "k--", linewidth=1, label="Ideal (measured = true)")
 
-        ax.set_title(f"Technology {tech}")
+        ax.set_title(f"Technology {names[int(tech)]}")
         ax.set_xlabel("Correct distance (m)")
         ax.set_ylabel("Measured distance (m)")
         ax.grid(True, alpha=0.3)
