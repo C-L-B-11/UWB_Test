@@ -31,6 +31,10 @@ DIST_RE = re.compile(
     r"\[[^\]]*\],DistMeasurement:Technology:(\d+);Distance:([-+0-9.eE]+);"
 )
 
+DIST2_RE = re.compile(
+    r"\[\d{4}-\d{2}-\d{2};(\d{2}):(\d{2}):([-+0-9.eE]+)\],DistMeasurement:Technology:(\d+);Distance:([-+0-9.eE]+);"
+)
+
 names = ["UWB","BLE","WIFI"]
 colors=["green","blue","red"]
 
@@ -61,11 +65,16 @@ def load_reference(folder: Path) -> dict[str, float]:
     return ref
 
 
-def parse_log(path: Path) -> dict[str, list[float]]:
+def parse_log(path: Path) -> dict[str, list[(float,float)]]:
     """Returns {'00': [distances...], '01': [...], ...}."""
     result = defaultdict(list)
-    for tech, dist in DIST_RE.findall(read_text(path)):
-        result[tech].append(float(dist))
+    offsetTime=0
+    for h,m,s,tech, dist in DIST2_RE.findall(read_text(path)):
+        timeS = int(h)*24*60 + int(m)*60 + float(s)
+        if(offsetTime==0):
+            offsetTime=timeS
+        timeS-=offsetTime
+        result[tech].append((timeS,float(dist)))
     return result
 
 def median(values):
@@ -106,6 +115,105 @@ def plot_counts(data):
         fig.savefig(out, dpi=150)
         print(f"Saved {out}")
 
+def meansAndPointsForDistance(data):
+    figC, axC = plt.subplots(figsize=(9, 6))
+    loC=0
+    hiC=0
+    for tech in sorted(data):
+        entries = sorted(data[tech], key=lambda e: e[0])
+
+        xs, ys = [], []
+        mean_x, mean_y = [], []
+        median_x, median_y = [], []
+        for true_dist, values in entries:
+            newLists = list(map(list, zip(*values)))
+
+            xs += [true_dist] * len(newLists[1])
+            ys += newLists[1]
+            if newLists[1]:
+                mean_x.append(true_dist)
+                mean_y.append(sum(newLists[1]) / len(newLists[1]))
+                median_x.append(true_dist)
+                median_y.append(median(newLists[1]))
+
+        fig, ax = plt.subplots(figsize=(9, 6))
+        ax.scatter(xs, ys, s=10, alpha=0.35, label="Measurements")
+        ax.plot(mean_x, mean_y, "o-", color="tab:red", label="Mean per distance")
+        axC.plot(mean_x, mean_y, "o-", color=colors[int(tech)], label=f"Mean per distance for {names[int(tech)]}")
+        ax.plot(median_x, median_y, "o-", color="tab:green", label="Median per distance")
+
+        lo = min(0, min(xs), min(ys))
+        hi = max(max(xs), max(ys))
+        loC = min(loC,lo)
+        hiC = max(hiC,hi)
+        ax.plot([lo, hi], [lo, hi], "k--", linewidth=1, label="Ideal (measured = true)")
+
+        ax.set_title(f"Technology {names[int(tech)]}")
+        ax.set_xlabel("Correct distance (m)")
+        ax.set_ylabel("Measured distance (m)")
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+        fig.tight_layout()
+
+        if SAVE_PNG:
+            out = FOLDER / f"plot_technology_{tech}.png"
+            fig.savefig(out, dpi=150)
+            print(f"Saved {out}")
+
+    axC.plot([loC, hiC], [loC, hiC], "k--", linewidth=1, label="Ideal (measured = true)")
+    
+    axC.set_title(f"Technologys in comparison")
+    axC.set_xlabel("Correct distance (m)")
+    axC.set_ylabel("Measured distance (m)")
+    axC.grid(True, alpha=0.3)
+    axC.legend()
+    figC.tight_layout()
+
+    if SAVE_PNG:
+        out = FOLDER / f"plot_technologys.png"
+        figC.savefig(out, dpi=150)
+        print(f"Saved {out}")
+
+def valuesForTime(data):
+    newDataX=defaultdict()
+    newDataY=defaultdict()
+    techs=[]
+    dists=[]
+    for tech in data:
+        techs.append(tech)
+        for dist,v2 in data[tech]:
+            d= "{:.4f}".format(dist)
+            
+            if not dists.__contains__(d):
+                dists.append(d)
+            if not newDataX.__contains__(d):
+                newDataX[d] = defaultdict()
+                newDataY[d] = defaultdict()
+            v3 = list(map(list,zip(*v2)))
+            newDataX[d][tech]=v3[0]
+            newDataY[d][tech]=v3[1]
+
+
+    for d in dists:
+        fig, ax = plt.subplots(figsize=(9, 6))
+
+        for t in techs:
+            ax.plot(newDataX[d][t], newDataY[d][t], "o-", color=colors[int(t)], label=f"Distance from {names[int(t)]}")
+        ax.set_title(f"Distance {d}m")
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Measured distance (m)")
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+        fig.tight_layout()
+
+        if SAVE_PNG:
+            out = FOLDER / f"plot_time_{d}.png"
+            fig.savefig(out, dpi=150)
+            print(f"Saved {out}")
+    return
+
+
+
 def main():
     ref = load_reference(FOLDER)
 
@@ -133,45 +241,14 @@ def main():
 
     if not data:
         sys.exit("No measurements found.")
-
-    for tech in sorted(data):
-        entries = sorted(data[tech], key=lambda e: e[0])
-
-        xs, ys = [], []
-        mean_x, mean_y = [], []
-        median_x, median_y = [], []
-        for true_dist, values in entries:
-            xs += [true_dist] * len(values)
-            ys += values
-            if values:
-                mean_x.append(true_dist)
-                mean_y.append(sum(values) / len(values))
-                median_x.append(true_dist)
-                median_y.append(median(values))
-
-        fig, ax = plt.subplots(figsize=(9, 6))
-        ax.scatter(xs, ys, s=10, alpha=0.35, label="Measurements")
-        ax.plot(mean_x, mean_y, "o-", color="tab:red", label="Mean per distance")
-        ax.plot(median_x, median_y, "o-", color="tab:green", label="Median per distance")
-
-        lo = min(0, min(xs), min(ys))
-        hi = max(max(xs), max(ys))
-        ax.plot([lo, hi], [lo, hi], "k--", linewidth=1, label="Ideal (measured = true)")
-
-        ax.set_title(f"Technology {names[int(tech)]}")
-        ax.set_xlabel("Correct distance (m)")
-        ax.set_ylabel("Measured distance (m)")
-        ax.grid(True, alpha=0.3)
-        ax.legend()
-        fig.tight_layout()
-
-        if SAVE_PNG:
-            out = FOLDER / f"plot_technology_{tech}.png"
-            fig.savefig(out, dpi=150)
-            print(f"Saved {out}")
-
+    
+    meansAndPointsForDistance(data)
 
     plot_counts(data)
+
+    valuesForTime(data)
+
+
     plt.show()
 
 
