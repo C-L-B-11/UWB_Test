@@ -8,6 +8,7 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.GnssMeasurement
 import android.location.GnssMeasurementsEvent
 import android.location.GnssNavigationMessage
 import android.location.GnssStatus
@@ -468,10 +469,11 @@ open class MainActivity  : AppCompatActivity() {
 
         override fun onGnssMeasurementsReceived(event: GnssMeasurementsEvent?) {
             Log.d("GnssListener","Received ${event?.measurements?.size} Measurements")
-            logEntry(LogEntryType.GnssMeasurement,event?.measurements?.size.toString())
+            //logEntry(LogEntryType.GnssMeasurement,event?.measurements?.size.toString())
             for(measurement in event?.measurements!!)
             {
-                //Log.d("GnssListener","${measurement}")
+                Log.d("GnssListener", measurement.toCompactString())
+                logEntry(LogEntryType.GnssMeasurement, measurement.toCompactString())
             }
         }
 
@@ -482,7 +484,7 @@ open class MainActivity  : AppCompatActivity() {
 
         override fun onGnssStatusChanged(gnssStatus: GnssStatus?) {
             Log.d("GnssListener","StatusChanged: $gnssStatus")
-            logEntry(LogEntryType.GnssStatus,"")
+            logEntry(LogEntryType.GnssStatus,"$gnssStatus;")
         }
 
         override fun onListenerRegistration(listener: String?, result: Boolean) {
@@ -1169,6 +1171,35 @@ open class MainActivity  : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    fun GnssMeasurement.toCompactString():String{
+        var s=""
+        s+="Svid:${this.svid};"
+        s+="ConstellationType:${this.constellationType};"
+        s+="TimeOffsetNanos:${this.timeOffsetNanos};"
+        s+="State:${this.state};"
+        s+="ReceivedSvTimeNanos:${this.receivedSvTimeNanos};"
+        s+="ReceivedSvTimeUncertaintyNanos:${this.receivedSvTimeUncertaintyNanos};"
+        s+="Cn0DbHz:${this.cn0DbHz};"
+        s+="BasebandCn0DbHz:${this.basebandCn0DbHz};"
+        s+="PseudorangeRateMetersPerSecond:${this.pseudorangeRateMetersPerSecond};"
+        s+="PseudorangeRateUncertaintyMetersPerSecond:${this.pseudorangeRateUncertaintyMetersPerSecond};"
+        s+="AccumulatedDeltaRangeState:${this.accumulatedDeltaRangeState};"
+        s+="AccumulatedDeltaRangeMeters:${this.accumulatedDeltaRangeMeters};"
+        s+="AccumulatedDeltaRangeUncertaintyMeters:${this.accumulatedDeltaRangeUncertaintyMeters};"
+        s+="CarrierFrequencyHz:${this.carrierFrequencyHz};"
+        s+="MultipathIndicator:${this.multipathIndicator};"
+        s+="SnrInDb:${this.snrInDb};"
+        s+="AgcLevelDb${this.automaticGainControlLevelDb};"
+        s+="CodeType:${this.codeType};"
+        s+="InterSignalBiasNs:${this.fullInterSignalBiasNanos};"
+        s+="InterSignalBiasUncertaintyNs:${this.fullInterSignalBiasUncertaintyNanos};"
+        s+="SatelliteInterSignalBiasNs:${this.satelliteInterSignalBiasNanos};"
+        s+="SatelliteInterSignalBiasUncertaintyNs:${this.satelliteInterSignalBiasUncertaintyNanos};"
+
+
+        return s
     }
 
     companion object {
