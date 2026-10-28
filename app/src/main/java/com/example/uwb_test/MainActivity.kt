@@ -470,6 +470,7 @@ open class MainActivity  : AppCompatActivity() {
         override fun onGnssMeasurementsReceived(event: GnssMeasurementsEvent?) {
             Log.d("GnssListener","Received ${event?.measurements?.size} Measurements")
             //logEntry(LogEntryType.GnssMeasurement,event?.measurements?.size.toString())
+            oobCallback.statusMessage("GnssDataReceived:${dateTimeString()}")
             for(measurement in event?.measurements!!)
             {
                 Log.d("GnssListener", measurement.toCompactString())
@@ -484,7 +485,7 @@ open class MainActivity  : AppCompatActivity() {
 
         override fun onGnssStatusChanged(gnssStatus: GnssStatus?) {
             Log.d("GnssListener","StatusChanged: $gnssStatus")
-            logEntry(LogEntryType.GnssStatus,"$gnssStatus;")
+            logEntry(LogEntryType.GnssStatus,"SatelliteCount:${gnssStatus?.satelliteCount};")
         }
 
         override fun onListenerRegistration(listener: String?, result: Boolean) {
