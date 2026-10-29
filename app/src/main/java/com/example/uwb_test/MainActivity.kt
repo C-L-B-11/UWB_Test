@@ -8,6 +8,10 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.location.GnssMeasurement
 import android.location.GnssMeasurementsEvent
 import android.location.GnssNavigationMessage
@@ -45,6 +49,10 @@ import android.ranging.uwb.UwbComplexChannel
 import androidx.core.view.children
 import androidx.core.view.size
 import androidx.media3.common.MimeTypes
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationListener
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationServices
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 import kotlinx.datetime.LocalDate
@@ -54,6 +62,8 @@ import kotlinx.datetime.format
 import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
 import java.util.Locale.getDefault
+import java.io.BufferedWriter
+import java.io.File
 import java.util.UUID
 
 import java.util.concurrent.Executor
@@ -77,6 +87,8 @@ const val CLOSED_SESSION:Byte = 5
 const val STARTED_SESSION:Byte = 6
 const val RESTART_SESSION:Byte = 7
 const val DATA_PACKAGE  :Byte = 0b00001000
+
+const val SensorSamplingRateHz = 10
 
 
 open class MainActivity  : AppCompatActivity() {
@@ -458,6 +470,8 @@ open class MainActivity  : AppCompatActivity() {
     private val availableCapabilities = MyRangingCapabilities()
 
     private var gnssProvider: GnssMeasurementProvider? = null
+    private var fusedLocationProviderClient : FusedLocationProviderClient?=null
+    private var sensorManager : SensorManager? = null
 
     private val gnssListener = object : GnssMeasurementListener {
         override fun onLocationChanged(location: Location?) {
@@ -480,11 +494,11 @@ open class MainActivity  : AppCompatActivity() {
 
         override fun onGnssNavigationMessageReceived(event: GnssNavigationMessage?) {
             Log.d("GnssListener","NavigationMessage")
-            logEntry(LogEntryType.GnssNavigation,"")
+            //logEntry(LogEntryType.GnssNavigation,"")
         }
 
         override fun onGnssStatusChanged(gnssStatus: GnssStatus?) {
-            Log.d("GnssListener","StatusChanged: $gnssStatus")
+            Log.d("GnssListener","StatusChanged: SatelliteCount:${gnssStatus?.satelliteCount};")
             logEntry(LogEntryType.GnssStatus,"SatelliteCount:${gnssStatus?.satelliteCount};")
         }
 
@@ -504,11 +518,32 @@ open class MainActivity  : AppCompatActivity() {
 
     }
 
+    private val locationListener = object: LocationListener {
+        override fun onLocationChanged(p0: Location) {
+            Log.d("LocationListener","LocationChanged: $p0")
+            logEntry(LogEntryType.FusedLocation,p0.toString())
+        }
+    }
+
+    private val sensorListener = object: SensorEventListener {
+        override fun onSensorChanged(p0: SensorEvent?) {
+            //Log.d("SensorListener","SensorChanged: $p0")
+            var s="${p0?.sensor?.name}:["
+            for(i in p0?.values!!)
+                s+="$i,"
+            s+= "];Accuracy:${p0.accuracy};"
+            logEntry(LogEntryType.IMUData,s)
+        }
+        override fun onAccuracyChanged(p0: Sensor?, p1: Int) {
+            Log.d("SensorListener","AccuracyChanged: $p0")
+        }
+    }
+
 
     /**
-     * Speichert Ereignisse für die log Datei
+     * Writer für die log Datei
      */
-    private var logEntries :  ArrayList<String>? = null
+    private var logWriter :  java.io.BufferedWriter? = null
     private var savedResults : MutableMap<Byte,Double> = mutableMapOf()
 
 
@@ -539,6 +574,8 @@ open class MainActivity  : AppCompatActivity() {
         setContentView(R.layout.activity_main);
 
         rangingManager = baseContext.getSystemService(RangingManager::class.java) as RangingManager
+        fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this)
+        sensorManager = baseContext.getSystemService(SENSOR_SERVICE) as SensorManager;
 
         initUI()
     }
@@ -638,9 +675,18 @@ open class MainActivity  : AppCompatActivity() {
             {
                 gnssProvider?.unregisterAll()
                 gnssProvider = null
+
+                fusedLocationProviderClient?.removeLocationUpdates(locationListener)
+                sensorManager?.unregisterListener(sensorListener)
             }
-            if(swMakeLog?.isChecked == true && logEntries!=null)
+            if(swMakeLog?.isChecked == true && logWriter!=null)
             {
+                try {
+                    logWriter?.close()
+                } catch (e: Exception) {
+                    Log.e("Log", "Error closing log writer: ${e.message}")
+                }
+                logWriter = null
                 safeLog()
             }
         }
@@ -671,6 +717,8 @@ open class MainActivity  : AppCompatActivity() {
         }
         val myMode = rangingMode
         Log.d("startMsrng","Start measuring technologies $myMode")
+        if(myMode==0.toByte())
+            return
         if((myMode and (1 shl RangingTechnology.UWB_RAW.ordinal).toByte()) != 0.toByte()){
             Log.d("startMsrng","UWB_RAW")
             UWBRawSession()
@@ -696,11 +744,26 @@ open class MainActivity  : AppCompatActivity() {
         }
         if(swUseGNSS?.isChecked == true){
             gnssProvider = GnssMeasurementProvider(this as Activity, this as Context,gnssListener)
+
+            val locReq = LocationRequest.Builder((1000/SensorSamplingRateHz).toLong()).build()
+            fusedLocationProviderClient?.requestLocationUpdates(locReq,myExecutor,locationListener)
+
+
+            val sensorAcc = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+            val sensorGyr = sensorManager?.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+            sensorManager?.registerListener(sensorListener, sensorAcc,1000000/SensorSamplingRateHz)
+            sensorManager?.registerListener(sensorListener, sensorGyr,1000000/SensorSamplingRateHz)
         }
 
         if(swMakeLog?.isChecked == true){
-            logEntries = ArrayList<String>()
-            savedResults.clear()
+            try {
+                val logFile = File(getExternalFilesDir(null), "temp_log.txt")
+                if (logFile.exists()) logFile.delete()
+                logWriter = logFile.bufferedWriter()
+                savedResults.clear()
+            } catch (e: Exception) {
+                Log.e("Log", "Could not create temp log file: ${e.message}")
+            }
         }
     }
 
@@ -957,23 +1020,30 @@ open class MainActivity  : AppCompatActivity() {
     }
 
     /**
-     * Fügt einem Logevent einen Zeitstempel hinzu und speichert es in logEntries
+     * Fügt einem Logevent einen Zeitstempel hinzu und schreibt ihn in die Log-Datei
      */
     @OptIn(ExperimentalTime::class)
+    @Synchronized
     public fun logEntry(type:LogEntryType,msg:String){
-        if(logEntries==null||swMakeLog?.isChecked==false)
+        val writer = logWriter ?: return
+        if(swMakeLog?.isChecked==false)
             return
-        var s = "[${dateTimeString()}],${type.name}:"
-        s+= msg
-        s+= "\n"
-        logEntries?.add(s)
+        try {
+            val s = "[${dateTimeString()}],${type.name}:$msg\n"
+            writer.write(s)
+            writer.flush()
+        } catch (e: Exception) {
+            Log.e("Log", "Error writing log entry: ${e.message}")
+        }
     }
 
     /**
      * Startet den Log Datei Dialog, wird von StopMeasuring() aufgerufen
      */
     public fun safeLog(){
-        if(logEntries==null || logEntries?.size==0) {
+        Log.d("Log","Safe Log File")
+        val logFile = File(getExternalFilesDir(null), "temp_log.txt")
+        if(!logFile.exists() || logFile.length() == 0L) {
             onFileSaveCancelled()
             return
         }
@@ -1118,27 +1188,29 @@ open class MainActivity  : AppCompatActivity() {
         runOnUiThread {
             Toast.makeText(this, "Save cancelled.", Toast.LENGTH_SHORT).show()
         }
-        logEntries = null
+        logWriter = null
+        val logFile = File(getExternalFilesDir(null), "temp_log.txt")
+        if (logFile.exists()) logFile.delete()
     }
 
 
     /**
-     * Datei wird unter angegebner URI gespeichert
+     * Datei wird unter angegebener URI gespeichert
      */
     private fun writeContentToUri(uri: Uri) {
         try {
+            val logFile = File(getExternalFilesDir(null), "temp_log.txt")
             contentResolver.openOutputStream(uri)?.use { outputStream ->
-                var fileText = ""
-                for(s in logEntries!!){
-                    fileText += s
+                logFile.inputStream().use { inputStream ->
+                    inputStream.copyTo(outputStream)
                 }
-                outputStream.write(fileText.toByteArray())
             }
             runOnUiThread{Toast.makeText(this, "File saved!", Toast.LENGTH_SHORT).show()}
+            logFile.delete()
         } catch (e: Exception) {
             runOnUiThread{Toast.makeText(this, "Error saving: ${e.message}", Toast.LENGTH_LONG).show()}
         }
-        logEntries = null
+        logWriter = null
     }
 
     private enum class UiMode{ Idle, Connecting,Connected,Measuring,Closing}
@@ -1153,7 +1225,7 @@ open class MainActivity  : AppCompatActivity() {
     }
 
     enum class LogEntryType{
-        DistMeasurement,GnssLocation,GnssMeasurement,GnssNavigation,GnssStatus,GnssNmea,GnssTTFF,StartedMeasuring,StoppedMeasuring
+        DistMeasurement,GnssLocation,GnssMeasurement,GnssNavigation,GnssStatus,GnssNmea,GnssTTFF,StartedMeasuring,StoppedMeasuring,FusedLocation,IMUData
     }
 
     /**
